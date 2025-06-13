@@ -1,0 +1,4 @@
+# このファイルを .env にリネームして使用してください
+# Discord Developer Portal で取得したボットトークンを設定してください
+
+DISCORD_TOKEN=your_bot_token_here 
