@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 import aiohttp
 import json
 import random
+import traceback
+import logging
 
 # 環境変数を読み込み
 load_dotenv()
@@ -26,6 +28,7 @@ RATE_LIMIT_SECONDS = 30  # 1ユーザーあたり30秒間隔で制限（重複�
 # 重複処理防止
 processed_messages = set()  # 処理済みメッセージIDの記録
 user_message_cache = {}  # ユーザー別の最後のメッセージ内容とタイムスタンプ
+command_executing = {}  # コマンド実行中フラグ（ユーザーID: コマンド名）
 
 # 会話履歴管理
 conversation_history = {}  # チャンネルIDごとの会話履歴
@@ -37,6 +40,12 @@ intents.message_content = True
 intents.members = True  # メンバー情報取得に必要（Developer Portalで有効化済み前提）
 # intents.presences = True  # ステータス情報取得に必要（要Developer Portal設定）
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+# メンバー管理用のデータ構造
+member_stats_dict = {}
+welcome_messages_dict = {}
+custom_commands_dict = {}
+moderation_settings_dict = {}
 
 @bot.event
 async def on_ready():
@@ -55,26 +64,48 @@ async def on_ready():
     print('------')
 
 @bot.event
+async def on_member_join(member):
+    """メンバー参加時の処理"""
+    # ウェルカムメッセージの送信
+    if member.guild.id in welcome_messages_dict:
+        channel = member.guild.system_channel
+        if channel:
+            await channel.send(welcome_messages_dict[member.guild.id].format(member=member))
+    
+    # メンバー統計の初期化
+    member_stats_dict[member.id] = {
+        'messages': 0,
+        'last_active': datetime.now(),
+        'join_date': datetime.now()
+    }
+
+@bot.event
+async def on_member_remove(member):
+    """メンバー退出時の処理"""
+    # 退出通知の送信
+    channel = member.guild.system_channel
+    if channel:
+        await channel.send(f"👋 {member.name} がサーバーを退出しました。")
+
+@bot.event
 async def on_message(message):
     # Bot自身のメッセージは無視
     if message.author == bot.user:
         return
-    
 
-    
-    # 重複処理を防ぐ（複数の方法で）
+    # 重複処理を防ぐ
     if message.id in processed_messages:
         return
     processed_messages.add(message.id)
     
-    # すべてのメッセージで重複チェックを実行（チーム分けも含む）
+    # ユーザー別の重複チェック
     user_id = message.author.id
     current_time = datetime.now()
     
     if user_id in user_message_cache:
         last_message, last_time = user_message_cache[user_id]
-        # 同じメッセージを5秒以内に処理していたらスキップ（チーム分けの場合は短縮）
-        if last_message == message.content and (current_time - last_time).total_seconds() < 5:
+        # 同じメッセージを3秒以内に処理していたらスキップ
+        if last_message == message.content and (current_time - last_time).total_seconds() < 3:
             print(f"重複処理防止: {message.author} - '{message.content}' ({(current_time - last_time).total_seconds():.1f}秒前)")
             return
     
@@ -85,49 +116,109 @@ async def on_message(message):
         processed_messages.clear()
     if len(user_message_cache) > 100:
         user_message_cache.clear()
+
+    # メッセージ統計の更新
+    if not message.author.bot:
+        if message.author.id not in member_stats_dict:
+            member_stats_dict[message.author.id] = {
+                'messages': 0,
+                'last_active': datetime.now(),
+                'join_date': message.author.joined_at or datetime.now()
+            }
+        member_stats_dict[message.author.id]['messages'] += 1
+        member_stats_dict[message.author.id]['last_active'] = datetime.now()
     
-    # Botがメンションされた場合、コマンドかAI会話かを判定
-    if bot.user.mentioned_in(message):
-        # メンション部分を除去
-        content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
+    # コマンドを最初に処理（重複防止のため）
+    if message.content.startswith('!'):
+        await bot.process_commands(message)
+        return
+    
+    # ボットがメンションされた場合の処理
+    if bot.user.mentioned_in(message) and not message.mention_everyone:
+        # メンションを除いたメッセージ内容を取得
+        content = message.content
+        # ボットのメンションを削除
+        content = content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
         
-        # チーム分けキーワードをチェック
-        if any(keyword in content for keyword in ['チーム分けし', 'チーム分け', 'チーム作', 'チームわ', 'team分', 'team作', 'チーム分けて', 'チーム決めて', 'チーム決め']):
-            print(f"メンション内チーム分け検出: '{content}'")
-            await handle_team_request(message)
-            return
+        # 空のメッセージの場合はデフォルト応答
+        if not content:
+            content = "こんにちは！何かお手伝いできることはありますか？"
         
-        # コマンドでない場合のみAI会話処理
-        elif content and not content.startswith('!'):
-            print(f"メンション内AI会話処理: '{content}'")
-            await handle_ai_conversation(message, content)
-        return  # メンション処理後は必ずreturnして他の処理をスキップ
+        # タイピング表示
+        async with message.channel.typing():
+            try:
+                # Gemini AIに質問
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                # 会話履歴を取得
+                channel_id = message.channel.id
+                history = conversation_history.get(channel_id, [])
+                
+                # プロンプトを作成（会話履歴を含む）
+                if history:
+                    context = "\n".join([f"{h['user']}: {h['message']}" for h in history[-5:]])  # 最新5件
+                    prompt = f"以下は最近の会話履歴です：\n{context}\n\n現在の質問: {content}\n\n日本語で自然に答えてください。"
+                else:
+                    prompt = f"{content}\n\n日本語で自然に答えてください。"
+                
+                response = model.generate_content(prompt)
+                
+                # 応答が空でない場合のみ送信
+                if response.text:
+                    # 長すぎる場合は分割
+                    if len(response.text) > 2000:
+                        chunks = [response.text[i:i+2000] for i in range(0, len(response.text), 2000)]
+                        for chunk in chunks:
+                            await message.reply(chunk)
+                    else:
+                        await message.reply(response.text)
+                    
+                    # 会話履歴に追加
+                    if channel_id not in conversation_history:
+                        conversation_history[channel_id] = []
+                    
+                    conversation_history[channel_id].append({
+                        'user': message.author.display_name,
+                        'message': content,
+                        'timestamp': datetime.now(),
+                        'response': response.text
+                    })
+                    
+                    # 履歴が長すぎる場合は古いものを削除
+                    if len(conversation_history[channel_id]) > MAX_HISTORY_LENGTH:
+                        conversation_history[channel_id] = conversation_history[channel_id][-MAX_HISTORY_LENGTH:]
+                else:
+                    await message.reply("すみません、応答を生成できませんでした。")
+                    
+            except Exception as e:
+                await message.reply(f"申し訳ありません、エラーが発生しました: {str(e)}")
+                print(f"Gemini APIエラー: {e}")
+        return
     
-    # チーム分けリクエストを検出
-    elif any(keyword in message.content for keyword in ['チーム分けし', 'チーム分け', 'チーム作', 'チームわ', 'team分', 'team作', 'チーム分けて', 'チーム決めて', 'チーム決め']) and len(message.content) > 3:
-        # VC専用チーム分けかどうかをチェック
-        if any(vc_keyword in message.content for vc_keyword in ['VC', 'vc', 'ボイス', 'voice']):
-            await handle_vc_team_request(message)
-        else:
-            await handle_team_request(message)
+    # チーム分けリクエストを検出（コマンドでない場合のみ）
+    team_keywords = ['チーム分けし', 'チーム分け', 'チーム作', 'チームわ', 'team分', 'team作', 'チーム分けて', 'チーム決めて', 'チーム決め']
+    if any(keyword in message.content for keyword in team_keywords) and len(message.content) > 3:
+        await handle_team_request(message)
+        return
     
-    # 特定のキーワードで始まる場合も自動応答
-    elif message.content.startswith(('教えて', 'おしえて', '？', '?', 'どう思う', 'どうおもう', 'なんで', 'なぜ', 'why', 'how')) and len(message.content) > 2:
-        await handle_ai_conversation(message, message.content)
-    
-    # 質問形式のメッセージに自動応答
-    elif any(keyword in message.content for keyword in ['ですか？', 'ですか?', 'でしょうか？', 'でしょうか?', 'だろうか？', 'だろうか?']) and len(message.content) > 3:
-        await handle_ai_conversation(message, message.content)
-    
-    # コマンドを処理
+    # その他のメッセージ処理
     await bot.process_commands(message)
 
 async def handle_team_request(message):
     """チーム分けリクエストの自動処理"""
     try:
+        # 実行中チェック
+        if message.author.id in command_executing and command_executing[message.author.id] == 'auto_team':
+            await message.reply("⚠️ 自動チーム分けが既に実行中です。少しお待ちください。")
+            return
+        
+        # 実行中フラグを設定
+        command_executing[message.author.id] = 'auto_team'
+        
         # レート制限チェック
         allowed, wait_time = check_rate_limit(message.author.id)
         if not allowed:
+            command_executing.pop(message.author.id, None)  # フラグをクリア
             await message.reply(f"⏰ 少し待ってください。あと{wait_time:.1f}秒後に再度お試しください。")
             return
         
@@ -153,7 +244,6 @@ async def handle_team_request(message):
             if len(all_human_members) >= 2:
                 members_to_use = all_human_members
                 status_note = "（全メンバー対象）"
-                # チーム分け結果と一緒に警告を表示
             else:
                 await message.reply("❌ チーム分けには最低2人のメンバーが必要です。")
                 return
@@ -165,15 +255,9 @@ async def handle_team_request(message):
         shuffled_members = members_to_use.copy()
         random.shuffle(shuffled_members)
         
-        # オンラインメンバーが少ない場合の警告をタイトルに含める
-        if len(online_members) < 2 and len(all_human_members) >= 2:
-            embed = discord.Embed(title="⚠️ チーム分け結果（全メンバー対象）", color=0xffa500)
-            embed.add_field(name="ℹ️ 注意", value=f"オンラインメンバーが少ないため、全メンバー({len(all_human_members)}人)でチーム分けしました。", inline=False)
-        else:
-            embed = discord.Embed(title="🎯 チーム分け結果", color=0x00ff00)
-        
-        # 人数に応じて自動でベストなチーム分け
+        # チーム分け結果の作成
         member_count = len(shuffled_members)
+        embed = discord.Embed(title="🎯 チーム分け結果", color=0x00ff00)
         
         if member_count == 2:
             # 1v1
@@ -188,84 +272,34 @@ async def handle_team_request(message):
                 inline=True
             )
             embed.set_footer(text=f"自動選択: 1v1形式 {status_note}")
-            
-        elif member_count == 3:
-            # 2v1
-            team1 = shuffled_members[:2]
-            team2 = [shuffled_members[2]]
+        elif member_count >= 3:
+            # 2v1以上
+            team_size = member_count // 2
+            team1 = shuffled_members[:team_size]
+            team2 = shuffled_members[team_size:team_size*2]
             
             embed.add_field(
-                name="🔴 チーム1 (2人)",
+                name=f"🔴 チーム1 ({len(team1)}人)",
                 value="\n".join([f"• {m.display_name}" for m in team1]),
                 inline=True
             )
             embed.add_field(
-                name="🔵 チーム2 (1人)",
-                value=f"• {team2[0].display_name}",
-                inline=True
-            )
-            embed.set_footer(text=f"自動選択: 2v1形式 {status_note}")
-            
-        elif member_count == 4:
-            # 2v2
-            team1 = shuffled_members[:2]
-            team2 = shuffled_members[2:4]
-            
-            embed.add_field(
-                name="🔴 チーム1 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team2]),
-                inline=True
-            )
-            embed.set_footer(text=f"自動選択: 2v2形式 {status_note}")
-            
-        elif member_count >= 6:
-            # 3v3（余りは待機）
-            team1 = shuffled_members[:3]
-            team2 = shuffled_members[3:6]
-            
-            embed.add_field(
-                name="🔴 チーム1 (3人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (3人)",
+                name=f"🔵 チーム2 ({len(team2)}人)",
                 value="\n".join([f"• {m.display_name}" for m in team2]),
                 inline=True
             )
             
-            if len(shuffled_members) > 6:
-                extras = shuffled_members[6:]
+            if len(shuffled_members) > team_size * 2:
+                extras = shuffled_members[team_size*2:]
                 embed.add_field(
                     name="⚪ 待機",
                     value="\n".join([f"• {m.display_name}" for m in extras]),
                     inline=False
                 )
-            embed.set_footer(text=f"自動選択: 3v3形式 {status_note}")
             
-        else:
-            # 5人の場合は不均等に分ける
-            team1 = shuffled_members[:3]
-            team2 = shuffled_members[3:5]
-            
-            embed.add_field(
-                name="🔴 チーム1 (3人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team2]),
-                inline=True
-            )
-            embed.set_footer(text=f"自動選択: 3v2形式 {status_note}")
+            embed.set_footer(text=f"自動選択: {len(team1)}v{len(team2)}形式 {status_note}")
         
-        # オンライン状況を表示
+        # 統計情報を追加
         status_info = f"対象: {len(members_to_use)}人 (オンライン: {len(online_members)}人)"
         embed.add_field(name="📊 情報", value=status_info, inline=False)
         
@@ -273,337 +307,10 @@ async def handle_team_request(message):
         
     except Exception as e:
         await message.reply(f"❌ チーム分けでエラーが発生しました: {str(e)}")
-
-async def handle_vc_team_request(message):
-    """VC専用チーム分けリクエストの自動処理"""
-    try:
-        # レート制限チェック
-        allowed, wait_time = check_rate_limit(message.author.id)
-        if not allowed:
-            await message.reply(f"⏰ 少し待ってください。あと{wait_time:.1f}秒後に再度お試しください。")
-            return
-        
-        # リクエスト時刻を記録
-        user_last_request[message.author.id] = datetime.now()
-        
-        guild = message.guild
-        if not guild:
-            await message.reply("❌ このコマンドはサーバー内でのみ使用できます。")
-            return
-        
-        # VC内メンバーを取得
-        vc_members = []
-        voice_channels_with_members = []
-        
-        for channel in guild.voice_channels:
-            if channel.members:
-                channel_members = [member for member in channel.members if not member.bot]
-                if channel_members:
-                    vc_members.extend(channel_members)
-                    voice_channels_with_members.append(f"🔊 {channel.name} ({len(channel_members)}人)")
-        
-        vc_members = list(set(vc_members))
-        
-        if len(vc_members) < 2:
-            embed = discord.Embed(
-                title="❌ VC内メンバー不足",
-                color=discord.Color.red()
-            )
-            embed.add_field(
-                name="現在の状況",
-                value=f"VC内人間メンバー: {len(vc_members)}人\nチーム分けには最低2人必要です。",
-                inline=False
-            )
-            
-            if voice_channels_with_members:
-                embed.add_field(
-                    name="アクティブなVC",
-                    value="\n".join(voice_channels_with_members),
-                    inline=False
-                )
-            else:
-                embed.add_field(
-                    name="💡 ヒント",
-                    value="まずボイスチャンネルに参加してから再度実行してください。",
-                    inline=False
-                )
-            
-            await message.reply(embed=embed)
-            return
-        
-        # メンバーをランダムシャッフル
-        shuffled_members = vc_members.copy()
-        random.shuffle(shuffled_members)
-        
-        member_count = len(shuffled_members)
-        embed = discord.Embed(title="🎤 VC チーム分け結果", color=0xff6b47)
-        
-        # 人数に応じて自動チーム分け
-        if member_count == 2:
-            embed.add_field(
-                name="🔴 プレイヤー1",
-                value=f"• {shuffled_members[0].display_name}",
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 プレイヤー2",
-                value=f"• {shuffled_members[1].display_name}",
-                inline=True
-            )
-            embed.set_footer(text="自動選択: 1v1形式 (VC内メンバー)")
-            
-        elif member_count == 3:
-            team1 = shuffled_members[:2]
-            team2 = [shuffled_members[2]]
-            
-            embed.add_field(
-                name="🔴 チーム1 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (1人)",
-                value=f"• {team2[0].display_name}",
-                inline=True
-            )
-            embed.set_footer(text="自動選択: 2v1形式 (VC内メンバー)")
-            
-        elif member_count == 4:
-            team1 = shuffled_members[:2]
-            team2 = shuffled_members[2:4]
-            
-            embed.add_field(
-                name="🔴 チーム1 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team2]),
-                inline=True
-            )
-            embed.set_footer(text="自動選択: 2v2形式 (VC内メンバー)")
-            
-        elif member_count >= 6:
-            team1 = shuffled_members[:3]
-            team2 = shuffled_members[3:6]
-            
-            embed.add_field(
-                name="🔴 チーム1 (3人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (3人)",
-                value="\n".join([f"• {m.display_name}" for m in team2]),
-                inline=True
-            )
-            
-            if len(shuffled_members) > 6:
-                extras = shuffled_members[6:]
-                embed.add_field(
-                    name="⚪ 待機",
-                    value="\n".join([f"• {m.display_name}" for m in extras]),
-                    inline=False
-                )
-            embed.set_footer(text="自動選択: 3v3形式 (VC内メンバー)")
-            
-        else:
-            team1 = shuffled_members[:3]
-            team2 = shuffled_members[3:5]
-            
-            embed.add_field(
-                name="🔴 チーム1 (3人)",
-                value="\n".join([f"• {m.display_name}" for m in team1]),
-                inline=True
-            )
-            embed.add_field(
-                name="🔵 チーム2 (2人)",
-                value="\n".join([f"• {m.display_name}" for m in team2]),
-                inline=True
-            )
-            embed.set_footer(text="自動選択: 3v2形式 (VC内メンバー)")
-        
-        # VC情報を表示
-        if voice_channels_with_members:
-            embed.add_field(
-                name="🎤 対象VC",
-                value="\n".join(voice_channels_with_members),
-                inline=False
-            )
-        
-        embed.add_field(
-            name="📊 情報",
-            value=f"VC内メンバー: {len(vc_members)}人",
-            inline=False
-        )
-        
-        await message.reply(embed=embed)
-        
-    except Exception as e:
-        await message.reply(f"❌ VC チーム分けでエラーが発生しました: {str(e)}")
-
-async def handle_ai_conversation(message, question):
-    """自然な会話でのAI応答処理"""
-    try:
-        # レート制限チェック  
-        allowed, wait_time = check_rate_limit(message.author.id)
-        if not allowed:
-            await message.reply(f"⏰ 少し待ってください。あと{wait_time:.1f}秒後に再度お試しください。")
-            return
-        
-        # 考え中のリアクション
-        await message.add_reaction("🤔")
-        
-        # リクエスト時刻を記録
-        user_last_request[message.author.id] = datetime.now()
-        
-        # Gemini AIモデルを初期化（軽量版・制限緩和）
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # より自然で多様な会話用の設定
-        conversation_config = genai.types.GenerationConfig(
-            temperature=0.9,  # より創造的で多様な応答
-            top_p=0.95,       # 語彙の多様性を増加
-            top_k=50,         # 候補を増やして定型文を避ける
-            max_output_tokens=400,  # 短めに制限
-        )
-        
-        # 過去の会話履歴を取得
-        channel_id = message.channel.id
-        if channel_id not in conversation_history:
-            conversation_history[channel_id] = []
-        
-        # 最近の会話履歴（最大5件）
-        recent_history = conversation_history[channel_id][-5:] if conversation_history[channel_id] else []
-        history_text = ""
-        if recent_history:
-            history_text = "\n\n【最近の会話履歴】\n" + "\n".join(recent_history)
-        
-        # サーバー情報を詳細取得
-        guild = message.guild
-        server_info = ""
-        if guild:
-            total_members = guild.member_count
-            server_name = guild.name
-            
-            # メンバー一覧を取得（制限あり）
-            members_list = []
-            try:
-                member_count = 0
-                for member in guild.members:
-                    if not member.bot:  # Bot以外の人間メンバー
-                        members_list.append(f"• {member.display_name} ({member.name})")
-                        member_count += 1
-                    if member_count >= 20:  # 最大20人まで
-                        break
-                
-                if not members_list:
-                    members_list = ["※メンバー情報の取得にはServer Members Intentが必要です"]
-                    
-            except Exception as e:
-                members_list = [f"メンバー一覧の取得エラー: {str(e)}"]
-            
-            # チャンネル一覧
-            text_channels = [f"#{ch.name}" for ch in guild.channels if hasattr(ch, 'name') and not str(ch.type).startswith('voice')][:10]
-            
-            # ロール一覧（@everyone以外）
-            roles_list = [role.name for role in guild.roles if role.name != "@everyone"][:10]
-            
-            server_info = f"""
-
-【詳細サーバー情報】
-🏷️ サーバー名: {server_name}
-👥 総メンバー数: {total_members}人
-🆔 サーバーID: {guild.id}
-📅 作成日: {guild.created_at.strftime("%Y年%m月%d日")}
-
-👤 メンバー一覧:
-{chr(10).join(members_list[:10])}
-{f"...他{len(members_list)-10}人" if len(members_list) > 10 else ""}
-
-💬 主要チャンネル:
-{chr(10).join([f"• {ch}" for ch in text_channels])}
-
-🎭 ロール:
-{chr(10).join([f"• {role}" for role in roles_list])}
-"""
-        
-        # 会話用プロンプト（サーバー情報・履歴を含む）
-        conversation_prompt = f"""
-        あなたは親しみやすくて頼りになるDiscord botの「リオン」です。ユーザーと自然で楽しい会話をしてください。{server_info}{history_text}
-        
-        ユーザーの新しいメッセージ: {question}
-        
-        返答のガイドライン：
-        - フレンドリーで親しみやすい口調（敬語は使わない）
-        - 簡潔で分かりやすく（100-300文字程度）
-        - 適度に絵文字を使用（🎮🤖✨など）
-        - ユーザーの質問に直接答える
-        - Discordのチャットとして自然に
-        - ユーザーの名前は使わない
-        - サーバー情報について聞かれたら、上記の詳細情報を使って具体的に答える
-        - メンバーの名前、チャンネル名、人数など全て具体的な情報で回答
-        - 「誰がいる？」「メンバーは？」→メンバー一覧から具体的な名前で答える
-        - 「何人？」→「{total_members}人いるよ！」のように数字で答える
-        - 過去の会話履歴がある場合は、文脈を理解して継続的な会話をする
-        - 前に話した内容について聞かれたら、履歴を参考にして答える
-        - 定型文や決まった文言は使わない
-        - 毎回異なる表現で自然に返答する
-        - 不要な追加情報や長い説明は避ける
-        
-        【チーム分け機能について】
-        - 「チーム分けして」「チーム分け」「チーム作って」などのリクエストがあった場合：
-          「!team コマンドでチーム分けできるよ！🎯\n例: !team (自動), !team 2v1, !team 3v3, !team 2v2」のように答える
-        - チーム分けの形式について聞かれたら、利用可能な形式（2v1, 3v3, 2v2, 1v1）を教える
-        
-        質問に対して直接的で自然な返答をしてください。
-        
-        【絶対に避けること】
-        - 「ちなみに、主なチャンネルは...」のような定型文
-        - 「他に何か知りたいことある？」のような決まり文句
-        - VALORANTについての長い説明（聞かれていない場合）
-        - 同じパターンの文章構造
-        - 不要な追加情報の羅列
-        
-        ユーザーの質問にだけ答えて、簡潔で自然に会話してください。
-        """
-        
-        # Gemini AIで応答生成
-        response = model.generate_content(conversation_prompt, generation_config=conversation_config)
-        
-        # リアクションを削除
-        await message.remove_reaction("🤔", bot.user)
-        
-        # 応答が長すぎる場合は分割
-        if len(response.text) > 2000:
-            chunks = [response.text[i:i+1900] for i in range(0, len(response.text), 1900)]
-            for chunk in chunks:
-                await message.reply(chunk)
-        else:
-            await message.reply(response.text)
-        
-        # 成功のリアクション
-        await message.add_reaction("✅")
-        
-        # 会話履歴に追加
-        user_name = message.author.display_name
-        bot_response = response.text[:100] + "..." if len(response.text) > 100 else response.text
-        conversation_history[channel_id].append(f"{user_name}: {question}")
-        conversation_history[channel_id].append(f"リオン: {bot_response}")
-        
-        # 履歴が長すぎる場合は古いものを削除
-        if len(conversation_history[channel_id]) > MAX_HISTORY_LENGTH * 2:  # ユーザー+ボットで2倍
-            conversation_history[channel_id] = conversation_history[channel_id][-MAX_HISTORY_LENGTH * 2:]
-            
-    except Exception as e:
-        # エラー時はリアクションを削除して報告
-        try:
-            await message.remove_reaction("🤔", bot.user)
-        except:
-            pass
-        await message.add_reaction("❌")
-        print(f"会話AI エラー: {e}")
+        print(f"チーム分けエラー: {e}")
+    finally:
+        # 実行中フラグをクリア
+        command_executing.pop(message.author.id, None)
 
 @bot.command(name='hello', help='挨拶をします')
 async def hello(ctx):
@@ -1595,6 +1302,24 @@ async def valorant_matches(ctx, *, riot_id=None):
 async def team_divide(ctx, format_type=None):
     """チーム分け機能"""
     try:
+        # 実行中チェック
+        if ctx.author.id in command_executing and command_executing[ctx.author.id] == 'team':
+            await ctx.send("⚠️ チーム分けコマンドが既に実行中です。少しお待ちください。")
+            return
+        
+        # 実行中フラグを設定
+        command_executing[ctx.author.id] = 'team'
+        
+        # レート制限チェック
+        allowed, wait_time = check_rate_limit(ctx.author.id)
+        if not allowed:
+            command_executing.pop(ctx.author.id, None)  # フラグをクリア
+            await ctx.send(f"⏰ 少し待ってください。あと{wait_time:.1f}秒後に再度お試しください。")
+            return
+        
+        # リクエスト時刻を記録
+        user_last_request[ctx.author.id] = datetime.now()
+        
         # サーバーの人間メンバーを取得（Bot除く）
         guild = ctx.guild
         if not guild:
@@ -1870,6 +1595,9 @@ async def team_divide(ctx, format_type=None):
         
     except Exception as e:
         await ctx.send(f"❌ チーム分けでエラーが発生しました: {str(e)}")
+    finally:
+        # 実行中フラグをクリア
+        command_executing.pop(ctx.author.id, None)
 
 @bot.command(name='quick_team', aliases=['qt'], help='簡単チーム分け（例: !qt, !quick_team 2v1）')
 async def quick_team(ctx, format_type=None):
@@ -2200,8 +1928,262 @@ async def on_command_error(ctx, error):
         print(f"エラーが発生しました: {error}")
         await ctx.send("予期しないエラーが発生しました。")
 
+@bot.command(name='mystats', help='メンバーの統計情報を表示します')
+async def show_member_stats(ctx, member: discord.Member = None):
+    """メンバーの統計情報を表示"""
+    try:
+        target = member or ctx.author
+        embed = discord.Embed(title=f"{target.name}の統計情報", color=0x00ff00)
+        embed.add_field(name="アカウント作成日", value=target.created_at.strftime('%Y-%m-%d'))
+        if target.joined_at:
+            embed.add_field(name="サーバー参加日", value=target.joined_at.strftime('%Y-%m-%d'))
+        embed.add_field(name="ユーザーID", value=target.id)
+        await ctx.send(embed=embed)
+    except Exception as e:
+        print(f"Stats error: {str(e)}")
+        await ctx.send("❌ 統計情報の取得中にエラーが発生しました。")
+
+# VALORANTマップ情報
+VALORANT_MAPS = {
+    "Ascent": {
+        "name": "アセント",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "イタリア・ヴェネツィアをモチーフにした標準的なマップ",
+        "emoji": "🏛️"
+    },
+    "Bind": {
+        "name": "バインド",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "モロッコをモチーフにしたテレポーター付きマップ",
+        "emoji": "🕌"
+    },
+    "Haven": {
+        "name": "ヘイヴン",
+        "type": "3サイト",
+        "sites": "A・B・C",
+        "description": "ブータンをモチーフにした3サイトマップ",
+        "emoji": "🏔️"
+    },
+    "Split": {
+        "name": "スプリット",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "日本・東京をモチーフにした縦長マップ",
+        "emoji": "🏙️"
+    },
+    "Icebox": {
+        "name": "アイスボックス",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "ロシア・シベリアをモチーフにした寒冷地マップ",
+        "emoji": "🧊"
+    },
+    "Breeze": {
+        "name": "ブリーズ",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "カリブ海の島をモチーフにした開放的なマップ",
+        "emoji": "🏝️"
+    },
+    "Fracture": {
+        "name": "フラクチャー",
+        "type": "特殊",
+        "sites": "A・B",
+        "description": "アメリカをモチーフにした特殊構造マップ",
+        "emoji": "⚡"
+    },
+    "Pearl": {
+        "name": "パール",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "ポルトガル・リスボンをモチーフにした水中都市マップ",
+        "emoji": "🐚"
+    },
+    "Lotus": {
+        "name": "ロータス",
+        "type": "3サイト",
+        "sites": "A・B・C",
+        "description": "インドをモチーフにした3サイトマップ",
+        "emoji": "🪷"
+    },
+    "Sunset": {
+        "name": "サンセット",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "アメリカ・ロサンゼルスをモチーフにしたマップ",
+        "emoji": "🌅"
+    },
+    "Abyss": {
+        "name": "アビス",
+        "type": "標準",
+        "sites": "A・B",
+        "description": "OMEGA EARTHの実験施設をモチーフにしたマップ",
+        "emoji": "🕳️"
+    }
+}
+
+@bot.command(name='map', aliases=['マップ', 'valmap'], help='VALORANTのマップをランダムに選択します')
+async def valorant_map_roulette(ctx, count: int = 1):
+    """VALORANTマップルーレット"""
+    try:
+        # カウント数の制限
+        if count < 1:
+            count = 1
+        elif count > 5:
+            count = 5
+            await ctx.send("⚠️ 一度に選択できるマップは最大5つまでです。")
+        
+        # マップをランダムに選択
+        selected_maps = random.sample(list(VALORANT_MAPS.keys()), min(count, len(VALORANT_MAPS)))
+        
+        if count == 1:
+            # 単一マップの場合は詳細表示
+            map_key = selected_maps[0]
+            map_info = VALORANT_MAPS[map_key]
+            
+            embed = discord.Embed(
+                title="🎯 VALORANTマップルーレット",
+                description=f"**{map_info['emoji']} {map_key} ({map_info['name']})**",
+                color=0xff4655
+            )
+            
+            embed.add_field(name="🗺️ マップタイプ", value=map_info['type'], inline=True)
+            embed.add_field(name="📍 サイト", value=map_info['sites'], inline=True)
+            embed.add_field(name="ℹ️ 説明", value=map_info['description'], inline=False)
+            
+            # マップ画像のURL（実際のゲーム画像は著作権の関係で使用しない）
+            embed.set_footer(text="Good luck, have fun! 🎮")
+            
+        else:
+            # 複数マップの場合はリスト表示
+            embed = discord.Embed(
+                title=f"🎯 VALORANTマップルーレット ({count}マップ)",
+                color=0xff4655
+            )
+            
+            map_list = []
+            for i, map_key in enumerate(selected_maps, 1):
+                map_info = VALORANT_MAPS[map_key]
+                map_list.append(f"{i}. {map_info['emoji']} **{map_key}** ({map_info['name']})")
+            
+            embed.description = "\n".join(map_list)
+            embed.set_footer(text="Good luck, have fun! 🎮")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"マップルーレットエラー: {e}")
+        await ctx.send("❌ マップルーレットでエラーが発生しました。")
+
+@bot.command(name='maplist', aliases=['マップ一覧', 'allmaps'], help='VALORANTの全マップ一覧を表示します')
+async def valorant_map_list(ctx):
+    """VALORANTマップ一覧表示"""
+    try:
+        embed = discord.Embed(
+            title="🗺️ VALORANT マップ一覧",
+            description="現在のマッププール",
+            color=0xff4655
+        )
+        
+        # マップタイプ別に分類
+        standard_maps = []
+        three_site_maps = []
+        special_maps = []
+        
+        for map_key, map_info in VALORANT_MAPS.items():
+            map_text = f"{map_info['emoji']} **{map_key}** ({map_info['name']})"
+            
+            if map_info['type'] == "標準":
+                standard_maps.append(map_text)
+            elif map_info['type'] == "3サイト":
+                three_site_maps.append(map_text)
+            else:
+                special_maps.append(map_text)
+        
+        if standard_maps:
+            embed.add_field(
+                name="🏛️ 標準マップ (A・Bサイト)",
+                value="\n".join(standard_maps),
+                inline=False
+            )
+        
+        if three_site_maps:
+            embed.add_field(
+                name="🔺 3サイトマップ (A・B・Cサイト)",
+                value="\n".join(three_site_maps),
+                inline=False
+            )
+        
+        if special_maps:
+            embed.add_field(
+                name="⚡ 特殊マップ",
+                value="\n".join(special_maps),
+                inline=False
+            )
+        
+        embed.add_field(
+            name="🎲 使用方法",
+            value="`!map` - ランダムに1マップ選択\n`!map 3` - ランダムに3マップ選択",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"総マップ数: {len(VALORANT_MAPS)}マップ")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"マップ一覧エラー: {e}")
+        await ctx.send("❌ マップ一覧の表示でエラーが発生しました。")
+
+@bot.command(name='mapinfo', aliases=['マップ情報'], help='特定のVALORANTマップの詳細情報を表示します')
+async def valorant_map_info(ctx, *, map_name=None):
+    """特定マップの詳細情報表示"""
+    try:
+        if not map_name:
+            await ctx.send("❌ マップ名を指定してください。例: `!mapinfo Ascent`")
+            return
+        
+        # マップ名の検索（部分一致対応）
+        found_map = None
+        map_name_lower = map_name.lower()
+        
+        for map_key, map_info in VALORANT_MAPS.items():
+            if (map_name_lower in map_key.lower() or 
+                map_name_lower in map_info['name'].lower()):
+                found_map = (map_key, map_info)
+                break
+        
+        if not found_map:
+            await ctx.send(f"❌ マップ「{map_name}」が見つかりません。`!maplist` で一覧を確認してください。")
+            return
+        
+        map_key, map_info = found_map
+        
+        embed = discord.Embed(
+            title=f"{map_info['emoji']} {map_key} ({map_info['name']})",
+            description=map_info['description'],
+            color=0xff4655
+        )
+        
+        embed.add_field(name="🗺️ マップタイプ", value=map_info['type'], inline=True)
+        embed.add_field(name="📍 サイト構成", value=map_info['sites'], inline=True)
+        embed.add_field(name="🎯 特徴", value=map_info['description'], inline=False)
+        
+        embed.set_footer(text="!map でランダム選択 | !maplist で全マップ一覧")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"マップ情報エラー: {e}")
+        await ctx.send("❌ マップ情報の表示でエラーが発生しました。")
+
 # Botを起動
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    
     token = os.getenv('DISCORD_TOKEN')
     if not token:
         print("エラー: DISCORD_TOKENが設定されていません。")
@@ -2212,4 +2194,6 @@ if __name__ == "__main__":
         except discord.LoginFailure:
             print("エラー: 無効なボットトークンです。")
         except Exception as e:
-            print(f"エラーが発生しました: {e}") 
+            import traceback
+            print(f"エラーが発生しました: {e}")
+            traceback.print_exc() 
