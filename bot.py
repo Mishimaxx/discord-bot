@@ -1486,8 +1486,102 @@ async def team_divide(ctx, format_type=None):
                         inline=False
                     )
             
+            # 5v5形式
+            elif format_type in ['5v5', '5対5']:
+                if len(shuffled_members) < 10:
+                    await ctx.send(f"⚠️ 5v5には10人必要ですが、{len(shuffled_members)}人しかいません。")
+                    # 可能な範囲でチーム分け
+                    if len(shuffled_members) >= 6:
+                        mid = len(shuffled_members) // 2
+                        team1 = shuffled_members[:mid]
+                        team2 = shuffled_members[mid:]
+                        
+                        embed.add_field(
+                            name=f"🔴 チーム1 ({len(team1)}人)",
+                            value="\n".join([f"• {m.display_name}" for m in team1]),
+                            inline=True
+                        )
+                        embed.add_field(
+                            name=f"🔵 チーム2 ({len(team2)}人)", 
+                            value="\n".join([f"• {m.display_name}" for m in team2]),
+                            inline=True
+                        )
+                        embed.set_footer(text="自動調整: 均等分け")
+                    else:
+                        await ctx.send("❌ チーム分けには最低6人必要です。")
+                        return
+                else:
+                    team1 = shuffled_members[:5]
+                    team2 = shuffled_members[5:10]
+                    
+                    embed.add_field(
+                        name="🔴 チーム1 (5人)",
+                        value="\n".join([f"• {m.display_name}" for m in team1]),
+                        inline=True
+                    )
+                    embed.add_field(
+                        name="🔵 チーム2 (5人)",
+                        value="\n".join([f"• {m.display_name}" for m in team2]),
+                        inline=True
+                    )
+                    
+                    if len(shuffled_members) > 10:
+                        extras = shuffled_members[10:]
+                        embed.add_field(
+                            name="⚪ 待機",
+                            value="\n".join([f"• {m.display_name}" for m in extras]),
+                            inline=False
+                        )
+            
+            # 4v4形式
+            elif format_type in ['4v4', '4対4']:
+                if len(shuffled_members) < 8:
+                    await ctx.send(f"⚠️ 4v4には8人必要ですが、{len(shuffled_members)}人しかいません。")
+                    # 可能な範囲でチーム分け
+                    if len(shuffled_members) >= 6:
+                        mid = len(shuffled_members) // 2
+                        team1 = shuffled_members[:mid]
+                        team2 = shuffled_members[mid:]
+                        
+                        embed.add_field(
+                            name=f"🔴 チーム1 ({len(team1)}人)",
+                            value="\n".join([f"• {m.display_name}" for m in team1]),
+                            inline=True
+                        )
+                        embed.add_field(
+                            name=f"🔵 チーム2 ({len(team2)}人)", 
+                            value="\n".join([f"• {m.display_name}" for m in team2]),
+                            inline=True
+                        )
+                        embed.set_footer(text="自動調整: 均等分け")
+                    else:
+                        await ctx.send("❌ チーム分けには最低6人必要です。")
+                        return
+                else:
+                    team1 = shuffled_members[:4]
+                    team2 = shuffled_members[4:8]
+                    
+                    embed.add_field(
+                        name="🔴 チーム1 (4人)",
+                        value="\n".join([f"• {m.display_name}" for m in team1]),
+                        inline=True
+                    )
+                    embed.add_field(
+                        name="🔵 チーム2 (4人)",
+                        value="\n".join([f"• {m.display_name}" for m in team2]),
+                        inline=True
+                    )
+                    
+                    if len(shuffled_members) > 8:
+                        extras = shuffled_members[8:]
+                        embed.add_field(
+                            name="⚪ 待機",
+                            value="\n".join([f"• {m.display_name}" for m in extras]),
+                            inline=False
+                        )
+            
             else:
-                await ctx.send("❌ 対応していない形式です。使用可能: `2v1`, `3v3`, `2v2`, `1v1`")
+                await ctx.send("❌ 対応していない形式です。使用可能: `2v1`, `3v3`, `2v2`, `1v1`, `4v4`, `5v5`")
                 return
         
         else:
@@ -1541,6 +1635,56 @@ async def team_divide(ctx, format_type=None):
                     inline=True
                 )
                 embed.set_footer(text="自動選択: 2v2形式")
+                
+            elif member_count >= 10:
+                # 5v5（余りは待機）
+                team1 = shuffled_members[:5]
+                team2 = shuffled_members[5:10]
+                
+                embed.add_field(
+                    name="🔴 チーム1 (5人)",
+                    value="\n".join([f"• {m.display_name}" for m in team1]),
+                    inline=True
+                )
+                embed.add_field(
+                    name="🔵 チーム2 (5人)",
+                    value="\n".join([f"• {m.display_name}" for m in team2]),
+                    inline=True
+                )
+                
+                if len(shuffled_members) > 10:
+                    extras = shuffled_members[10:]
+                    embed.add_field(
+                        name="⚪ 待機",
+                        value="\n".join([f"• {m.display_name}" for m in extras]),
+                        inline=False
+                    )
+                embed.set_footer(text="自動選択: 5v5形式")
+                
+            elif member_count >= 8:
+                # 4v4（余りは待機）
+                team1 = shuffled_members[:4]
+                team2 = shuffled_members[4:8]
+                
+                embed.add_field(
+                    name="🔴 チーム1 (4人)",
+                    value="\n".join([f"• {m.display_name}" for m in team1]),
+                    inline=True
+                )
+                embed.add_field(
+                    name="🔵 チーム2 (4人)",
+                    value="\n".join([f"• {m.display_name}" for m in team2]),
+                    inline=True
+                )
+                
+                if len(shuffled_members) > 8:
+                    extras = shuffled_members[8:]
+                    embed.add_field(
+                        name="⚪ 待機",
+                        value="\n".join([f"• {m.display_name}" for m in extras]),
+                        inline=False
+                    )
+                embed.set_footer(text="自動選択: 4v4形式")
                 
             elif member_count >= 6:
                 # 3v3（余りは待機）
@@ -1794,8 +1938,104 @@ async def vc_team_divide(ctx, format_type=None):
                     )
                 embed.set_footer(text="指定形式: 1v1 (VC内メンバー)")
             
+            # 5v5形式（VC版）
+            elif format_type in ['5v5', '5対5']:
+                if len(shuffled_members) < 10:
+                    await ctx.send(f"⚠️ 5v5には10人必要ですが、VC内に{len(shuffled_members)}人しかいません。")
+                    # 可能な範囲でチーム分け
+                    if len(shuffled_members) >= 6:
+                        mid = len(shuffled_members) // 2
+                        team1 = shuffled_members[:mid]
+                        team2 = shuffled_members[mid:]
+                        
+                        embed.add_field(
+                            name=f"🔴 チーム1 ({len(team1)}人)",
+                            value="\n".join([f"• {m.display_name}" for m in team1]),
+                            inline=True
+                        )
+                        embed.add_field(
+                            name=f"🔵 チーム2 ({len(team2)}人)",
+                            value="\n".join([f"• {m.display_name}" for m in team2]),
+                            inline=True
+                        )
+                        embed.set_footer(text="自動調整: 均等分け (VC内メンバー)")
+                    else:
+                        await ctx.send("❌ チーム分けには最低6人必要です。")
+                        return
+                else:
+                    team1 = shuffled_members[:5]
+                    team2 = shuffled_members[5:10]
+                    
+                    embed.add_field(
+                        name="🔴 チーム1 (5人)",
+                        value="\n".join([f"• {m.display_name}" for m in team1]),
+                        inline=True
+                    )
+                    embed.add_field(
+                        name="🔵 チーム2 (5人)",
+                        value="\n".join([f"• {m.display_name}" for m in team2]),
+                        inline=True
+                    )
+                    
+                    if len(shuffled_members) > 10:
+                        extras = shuffled_members[10:]
+                        embed.add_field(
+                            name="⚪ 待機",
+                            value="\n".join([f"• {m.display_name}" for m in extras]),
+                            inline=False
+                        )
+                    embed.set_footer(text="指定形式: 5v5 (VC内メンバー)")
+            
+            # 4v4形式（VC版）
+            elif format_type in ['4v4', '4対4']:
+                if len(shuffled_members) < 8:
+                    await ctx.send(f"⚠️ 4v4には8人必要ですが、VC内に{len(shuffled_members)}人しかいません。")
+                    # 可能な範囲でチーム分け
+                    if len(shuffled_members) >= 6:
+                        mid = len(shuffled_members) // 2
+                        team1 = shuffled_members[:mid]
+                        team2 = shuffled_members[mid:]
+                        
+                        embed.add_field(
+                            name=f"🔴 チーム1 ({len(team1)}人)",
+                            value="\n".join([f"• {m.display_name}" for m in team1]),
+                            inline=True
+                        )
+                        embed.add_field(
+                            name=f"🔵 チーム2 ({len(team2)}人)",
+                            value="\n".join([f"• {m.display_name}" for m in team2]),
+                            inline=True
+                        )
+                        embed.set_footer(text="自動調整: 均等分け (VC内メンバー)")
+                    else:
+                        await ctx.send("❌ チーム分けには最低6人必要です。")
+                        return
+                else:
+                    team1 = shuffled_members[:4]
+                    team2 = shuffled_members[4:8]
+                    
+                    embed.add_field(
+                        name="🔴 チーム1 (4人)",
+                        value="\n".join([f"• {m.display_name}" for m in team1]),
+                        inline=True
+                    )
+                    embed.add_field(
+                        name="🔵 チーム2 (4人)",
+                        value="\n".join([f"• {m.display_name}" for m in team2]),
+                        inline=True
+                    )
+                    
+                    if len(shuffled_members) > 8:
+                        extras = shuffled_members[8:]
+                        embed.add_field(
+                            name="⚪ 待機",
+                            value="\n".join([f"• {m.display_name}" for m in extras]),
+                            inline=False
+                        )
+                    embed.set_footer(text="指定形式: 4v4 (VC内メンバー)")
+            
             else:
-                await ctx.send("❌ 対応していない形式です。使用可能: `2v1`, `3v3`, `2v2`, `1v1`")
+                await ctx.send("❌ 対応していない形式です。使用可能: `2v1`, `3v3`, `2v2`, `1v1`, `4v4`, `5v5`")
                 return
         
         else:
@@ -1849,6 +2089,56 @@ async def vc_team_divide(ctx, format_type=None):
                     inline=True
                 )
                 embed.set_footer(text="自動選択: 2v2形式 (VC内メンバー)")
+                
+            elif member_count >= 10:
+                # 5v5（余りは待機）
+                team1 = shuffled_members[:5]
+                team2 = shuffled_members[5:10]
+                
+                embed.add_field(
+                    name="🔴 チーム1 (5人)",
+                    value="\n".join([f"• {m.display_name}" for m in team1]),
+                    inline=True
+                )
+                embed.add_field(
+                    name="🔵 チーム2 (5人)",
+                    value="\n".join([f"• {m.display_name}" for m in team2]),
+                    inline=True
+                )
+                
+                if len(shuffled_members) > 10:
+                    extras = shuffled_members[10:]
+                    embed.add_field(
+                        name="⚪ 待機",
+                        value="\n".join([f"• {m.display_name}" for m in extras]),
+                        inline=False
+                    )
+                embed.set_footer(text="自動選択: 5v5形式 (VC内メンバー)")
+                
+            elif member_count >= 8:
+                # 4v4（余りは待機）
+                team1 = shuffled_members[:4]
+                team2 = shuffled_members[4:8]
+                
+                embed.add_field(
+                    name="🔴 チーム1 (4人)",
+                    value="\n".join([f"• {m.display_name}" for m in team1]),
+                    inline=True
+                )
+                embed.add_field(
+                    name="🔵 チーム2 (4人)",
+                    value="\n".join([f"• {m.display_name}" for m in team2]),
+                    inline=True
+                )
+                
+                if len(shuffled_members) > 8:
+                    extras = shuffled_members[8:]
+                    embed.add_field(
+                        name="⚪ 待機",
+                        value="\n".join([f"• {m.display_name}" for m in extras]),
+                        inline=False
+                    )
+                embed.set_footer(text="自動選択: 4v4形式 (VC内メンバー)")
                 
             elif member_count >= 6:
                 # 3v3（余りは待機）
