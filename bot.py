@@ -2281,80 +2281,75 @@ async def show_member_stats(ctx, member: discord.Member = None):
 VALORANT_MAPS = {
     "Ascent": {
         "name": "アセント",
-        "type": "標準",
         "sites": "A・B",
         "description": "イタリア・ヴェネツィアをモチーフにした標準的なマップ",
         "emoji": "🏛️"
     },
     "Bind": {
         "name": "バインド",
-        "type": "標準",
         "sites": "A・B",
         "description": "モロッコをモチーフにしたテレポーター付きマップ",
         "emoji": "🕌"
     },
     "Haven": {
         "name": "ヘイヴン",
-        "type": "3サイト",
         "sites": "A・B・C",
         "description": "ブータンをモチーフにした3サイトマップ",
         "emoji": "🏔️"
     },
     "Split": {
         "name": "スプリット",
-        "type": "標準",
         "sites": "A・B",
         "description": "日本・東京をモチーフにした縦長マップ",
         "emoji": "🏙️"
     },
     "Icebox": {
         "name": "アイスボックス",
-        "type": "標準",
         "sites": "A・B",
         "description": "ロシア・シベリアをモチーフにした寒冷地マップ",
         "emoji": "🧊"
     },
     "Breeze": {
         "name": "ブリーズ",
-        "type": "標準",
         "sites": "A・B",
         "description": "カリブ海の島をモチーフにした開放的なマップ",
         "emoji": "🏝️"
     },
     "Fracture": {
         "name": "フラクチャー",
-        "type": "特殊",
         "sites": "A・B",
         "description": "アメリカをモチーフにした特殊構造マップ",
         "emoji": "⚡"
     },
     "Pearl": {
         "name": "パール",
-        "type": "標準",
         "sites": "A・B",
         "description": "ポルトガル・リスボンをモチーフにした水中都市マップ",
         "emoji": "🐚"
     },
     "Lotus": {
         "name": "ロータス",
-        "type": "3サイト",
         "sites": "A・B・C",
         "description": "インドをモチーフにした3サイトマップ",
         "emoji": "🪷"
     },
     "Sunset": {
         "name": "サンセット",
-        "type": "標準",
         "sites": "A・B",
         "description": "アメリカ・ロサンゼルスをモチーフにしたマップ",
         "emoji": "🌅"
     },
     "Abyss": {
         "name": "アビス",
-        "type": "標準",
         "sites": "A・B",
         "description": "OMEGA EARTHの実験施設をモチーフにしたマップ",
         "emoji": "🕳️"
+    },
+    "Carod": {
+        "name": "カロード",
+        "sites": "A・B",
+        "description": "フランス城下町を舞台にした多層構造マップ",
+        "emoji": "🏰"
     }
 }
 
@@ -2384,7 +2379,6 @@ async def valorant_map_roulette(ctx, count: int = 1):
                 color=0xff4655
             )
             
-            embed.add_field(name="🗺️ マップタイプ", value=map_info['type'], inline=True)
             embed.add_field(name="📍 サイト", value=map_info['sites'], inline=True)
             embed.add_field(name="ℹ️ 説明", value=map_info['description'], inline=False)
             
@@ -2423,39 +2417,20 @@ async def valorant_map_list(ctx):
             color=0xff4655
         )
         
-        # マップタイプ別に分類
-        standard_maps = []
-        three_site_maps = []
-        special_maps = []
-        
+        # 全マップを一覧表示
+        map_list = []
         for map_key, map_info in VALORANT_MAPS.items():
-            map_text = f"{map_info['emoji']} **{map_key}** ({map_info['name']})"
-            
-            if map_info['type'] == "標準":
-                standard_maps.append(map_text)
-            elif map_info['type'] == "3サイト":
-                three_site_maps.append(map_text)
-            else:
-                special_maps.append(map_text)
+            map_text = f"{map_info['emoji']} **{map_key}** ({map_info['name']}) - {map_info['sites']}"
+            map_list.append(map_text)
         
-        if standard_maps:
+        # マップを3つずつに分けて表示（見やすくするため）
+        chunk_size = 4
+        for i in range(0, len(map_list), chunk_size):
+            chunk = map_list[i:i+chunk_size]
+            field_name = f"🗺️ マップ {i//chunk_size + 1}" if len(map_list) > chunk_size else "🗺️ 全マップ"
             embed.add_field(
-                name="🏛️ 標準マップ (A・Bサイト)",
-                value="\n".join(standard_maps),
-                inline=False
-            )
-        
-        if three_site_maps:
-            embed.add_field(
-                name="🔺 3サイトマップ (A・B・Cサイト)",
-                value="\n".join(three_site_maps),
-                inline=False
-            )
-        
-        if special_maps:
-            embed.add_field(
-                name="⚡ 特殊マップ",
-                value="\n".join(special_maps),
+                name=field_name,
+                value="\n".join(chunk),
                 inline=False
             )
         
@@ -2504,7 +2479,6 @@ async def valorant_map_info(ctx, *, map_name=None):
             color=0xff4655
         )
         
-        embed.add_field(name="🗺️ マップタイプ", value=map_info['type'], inline=True)
         embed.add_field(name="📍 サイト構成", value=map_info['sites'], inline=True)
         embed.add_field(name="🎯 特徴", value=map_info['description'], inline=False)
         
