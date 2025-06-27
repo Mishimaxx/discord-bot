@@ -2917,31 +2917,31 @@ async def valorant_map_info(ctx, *, map_name=None):
 
 # VALORANTランクシステム
 VALORANT_RANKS = {
-    "レディアント": {"tier": 9, "display": "🔥 レディアント", "value": 900, "color": 0xFFFFFF},
-    "イモータル3": {"tier": 8, "display": "💎 イモータル 3", "value": 803, "color": 0xBA55D3},
-    "イモータル2": {"tier": 8, "display": "💎 イモータル 2", "value": 802, "color": 0xBA55D3},
-    "イモータル1": {"tier": 8, "display": "💎 イモータル 1", "value": 801, "color": 0xBA55D3},
-    "アセンダント3": {"tier": 7, "display": "🔆 アセンダント 3", "value": 703, "color": 0x32CD32},
-    "アセンダント2": {"tier": 7, "display": "🔆 アセンダント 2", "value": 702, "color": 0x32CD32},
-    "アセンダント1": {"tier": 7, "display": "🔆 アセンダント 1", "value": 701, "color": 0x32CD32},
-    "ダイヤ3": {"tier": 6, "display": "💠 ダイヤモンド 3", "value": 603, "color": 0x87CEEB},
-    "ダイヤ2": {"tier": 6, "display": "💠 ダイヤモンド 2", "value": 602, "color": 0x87CEEB},
-    "ダイヤ1": {"tier": 6, "display": "💠 ダイヤモンド 1", "value": 601, "color": 0x87CEEB},
-    "プラチナ3": {"tier": 5, "display": "🔷 プラチナ 3", "value": 503, "color": 0x40E0D0},
-    "プラチナ2": {"tier": 5, "display": "🔷 プラチナ 2", "value": 502, "color": 0x40E0D0},
-    "プラチナ1": {"tier": 5, "display": "🔷 プラチナ 1", "value": 501, "color": 0x40E0D0},
-    "ゴールド3": {"tier": 4, "display": "🟡 ゴールド 3", "value": 403, "color": 0xFFD700},
-    "ゴールド2": {"tier": 4, "display": "🟡 ゴールド 2", "value": 402, "color": 0xFFD700},
-    "ゴールド1": {"tier": 4, "display": "🟡 ゴールド 1", "value": 401, "color": 0xFFD700},
-    "シルバー3": {"tier": 3, "display": "⚪ シルバー 3", "value": 303, "color": 0xC0C0C0},
-    "シルバー2": {"tier": 3, "display": "⚪ シルバー 2", "value": 302, "color": 0xC0C0C0},
-    "シルバー1": {"tier": 3, "display": "⚪ シルバー 1", "value": 301, "color": 0xC0C0C0},
-    "ブロンズ3": {"tier": 2, "display": "🟤 ブロンズ 3", "value": 203, "color": 0xCD7F32},
-    "ブロンズ2": {"tier": 2, "display": "🟤 ブロンズ 2", "value": 202, "color": 0xCD7F32},
-    "ブロンズ1": {"tier": 2, "display": "🟤 ブロンズ 1", "value": 201, "color": 0xCD7F32},
-    "アイアン3": {"tier": 1, "display": "⚫ アイアン 3", "value": 103, "color": 0x696969},
-    "アイアン2": {"tier": 1, "display": "⚫ アイアン 2", "value": 102, "color": 0x696969},
-    "アイアン1": {"tier": 1, "display": "⚫ アイアン 1", "value": 101, "color": 0x696969}
+    "レディアント": {"tier": 9, "display": "🔥 レディアント", "value": 900, "color": 0xFFFFFF, "image_url": "https://picsum.photos/200/200?random=900"},
+    "イモータル3": {"tier": 8, "display": "💎 イモータル 3", "value": 803, "color": 0xBA55D3, "image_url": "https://picsum.photos/200/200?random=803"},
+    "イモータル2": {"tier": 8, "display": "💎 イモータル 2", "value": 802, "color": 0xBA55D3, "image_url": "https://picsum.photos/200/200?random=802"},
+    "イモータル1": {"tier": 8, "display": "💎 イモータル 1", "value": 801, "color": 0xBA55D3, "image_url": "https://picsum.photos/200/200?random=801"},
+    "アセンダント3": {"tier": 7, "display": "🔆 アセンダント 3", "value": 703, "color": 0x32CD32, "image_url": "https://picsum.photos/200/200?random=703"},
+    "アセンダント2": {"tier": 7, "display": "🔆 アセンダント 2", "value": 702, "color": 0x32CD32, "image_url": "https://picsum.photos/200/200?random=702"},
+    "アセンダント1": {"tier": 7, "display": "🔆 アセンダント 1", "value": 701, "color": 0x32CD32, "image_url": "https://picsum.photos/200/200?random=701"},
+    "ダイヤ3": {"tier": 6, "display": "💠 ダイヤモンド 3", "value": 603, "color": 0x87CEEB, "image_url": "https://picsum.photos/200/200?random=603"},
+    "ダイヤ2": {"tier": 6, "display": "💠 ダイヤモンド 2", "value": 602, "color": 0x87CEEB, "image_url": "https://picsum.photos/200/200?random=602"},
+    "ダイヤ1": {"tier": 6, "display": "💠 ダイヤモンド 1", "value": 601, "color": 0x87CEEB, "image_url": "https://picsum.photos/200/200?random=601"},
+    "プラチナ3": {"tier": 5, "display": "🔷 プラチナ 3", "value": 503, "color": 0x40E0D0, "image_url": "https://picsum.photos/200/200?random=503"},
+    "プラチナ2": {"tier": 5, "display": "🔷 プラチナ 2", "value": 502, "color": 0x40E0D0, "image_url": "https://picsum.photos/200/200?random=502"},
+    "プラチナ1": {"tier": 5, "display": "🔷 プラチナ 1", "value": 501, "color": 0x40E0D0, "image_url": "https://picsum.photos/200/200?random=501"},
+    "ゴールド3": {"tier": 4, "display": "🟡 ゴールド 3", "value": 403, "color": 0xFFD700, "image_url": "https://picsum.photos/200/200?random=403"},
+    "ゴールド2": {"tier": 4, "display": "🟡 ゴールド 2", "value": 402, "color": 0xFFD700, "image_url": "https://picsum.photos/200/200?random=402"},
+    "ゴールド1": {"tier": 4, "display": "🟡 ゴールド 1", "value": 401, "color": 0xFFD700, "image_url": "https://picsum.photos/200/200?random=401"},
+    "シルバー3": {"tier": 3, "display": "⚪ シルバー 3", "value": 303, "color": 0xC0C0C0, "image_url": "https://picsum.photos/200/200?random=303"},
+    "シルバー2": {"tier": 3, "display": "⚪ シルバー 2", "value": 302, "color": 0xC0C0C0, "image_url": "https://picsum.photos/200/200?random=302"},
+    "シルバー1": {"tier": 3, "display": "⚪ シルバー 1", "value": 301, "color": 0xC0C0C0, "image_url": "https://picsum.photos/200/200?random=301"},
+    "ブロンズ3": {"tier": 2, "display": "🟤 ブロンズ 3", "value": 203, "color": 0xCD7F32, "image_url": "https://picsum.photos/200/200?random=203"},
+    "ブロンズ2": {"tier": 2, "display": "🟤 ブロンズ 2", "value": 202, "color": 0xCD7F32, "image_url": "https://picsum.photos/200/200?random=202"},
+    "ブロンズ1": {"tier": 2, "display": "🟤 ブロンズ 1", "value": 201, "color": 0xCD7F32, "image_url": "https://picsum.photos/200/200?random=201"},
+    "アイアン3": {"tier": 1, "display": "⚫ アイアン 3", "value": 103, "color": 0x696969, "image_url": "https://picsum.photos/200/200?random=103"},
+    "アイアン2": {"tier": 1, "display": "⚫ アイアン 2", "value": 102, "color": 0x696969, "image_url": "https://picsum.photos/200/200?random=102"},
+    "アイアン1": {"tier": 1, "display": "⚫ アイアン 1", "value": 101, "color": 0x696969, "image_url": "https://picsum.photos/200/200?random=101"}
 }
 
 # ユーザーランク情報ストレージ
@@ -2949,14 +2949,12 @@ user_ranks = {}  # {user_id: {"current": "rank", "peak": "rank", "updated": date
 
 def parse_rank_input(rank_input):
     """ランク入力をパース"""
-    print(f"🔍 parse_rank_input called with: '{rank_input}'")
     rank_input = rank_input.strip()
     
     # 前処理：スペース削除、全角数字を半角に変換
     rank_input = rank_input.replace(" ", "").replace("　", "")  # 半角・全角スペース削除
     rank_input = rank_input.replace("１", "1").replace("２", "2").replace("３", "3")  # 全角数字変換
     rank_input = rank_input.replace("ダイヤモンド", "ダイヤ")  # 「ダイヤモンド」→「ダイヤ」変換
-    print(f"🔍 After preprocessing: '{rank_input}'")
     
     # 完全一致チェック
     for rank_key in VALORANT_RANKS.keys():
@@ -2999,19 +2997,13 @@ def parse_rank_input(rank_input):
                 # 数字を抽出
                 for i in range(3, 0, -1):
                     if str(i) in rank_input:
-                        result = ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
-                        print(f"🔍 Found rank: '{result}' for input '{rank_input}'")
-                        return result
+                        return ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
                 # 数字がない場合は最高ランク（3）
-                result = ranks[0]
-                print(f"🔍 Default to highest rank: '{result}' for input '{rank_input}'")
-                return result
+                return ranks[0]
         else:
             if rank_input.lower().startswith(base_name.lower()):
-                print(f"🔍 Found single rank: '{ranks}' for input '{rank_input}'")
                 return ranks
     
-    print(f"🔍 No rank found for input: '{rank_input}'")
     return None
 
 @bot.command(name='rank', help='VALORANTランクを管理します（例: !rank set current ダイヤ2, !rank show）')
@@ -3019,9 +3011,6 @@ def parse_rank_input(rank_input):
 async def rank_system(ctx, action=None, rank_type=None, *rank_input):
     """VALORANTランクシステム"""
     try:
-        print(f"🔍 Rank command called: action={action}, rank_type={rank_type}, rank_input={rank_input}")
-        print(f"🔍 VALORANT_RANKS defined: {len(VALORANT_RANKS)} ranks")
-        print(f"🔍 user_ranks defined: {len(user_ranks)} users")
         if not action:
             # ヘルプ表示
             embed = discord.Embed(
@@ -3063,11 +3052,9 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
             
             # rank_inputをtupleから文字列に変換
             rank_input_str = " ".join(rank_input) if rank_input else ""
-            print(f"🔍 About to parse rank input: '{rank_input_str}'")
             
             # ランクをパース
             parsed_rank = parse_rank_input(rank_input_str)
-            print(f"🔍 Parsed rank result: '{parsed_rank}'")
             
             if not parsed_rank:
                 rank_list = ", ".join(list(VALORANT_RANKS.keys())[:10]) + "..."
@@ -3075,10 +3062,8 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 return
             
             user_id = ctx.author.id
-            print(f"🔍 User ID: {user_id}")
             
             if user_id not in user_ranks:
-                print(f"🔍 Creating new user_ranks entry for {user_id}")
                 user_ranks[user_id] = {"current": None, "peak": None, "updated": datetime.now()}
             
             # ランクタイプを統一
@@ -3096,6 +3081,10 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 description=f"{type_display}を **{rank_info['display']}** に設定しました",
                 color=rank_info['color']
             )
+            
+            # ランク画像を表示
+            if 'image_url' in rank_info:
+                embed.set_thumbnail(url=rank_info['image_url'])
             
             if old_rank and old_rank != parsed_rank:
                 old_info = VALORANT_RANKS[old_rank]
@@ -3143,6 +3132,11 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 color=display_color
             )
             
+            # メインランクの画像を表示（現在ランク優先、なければピークランク）
+            main_rank = current_rank if current_rank else peak_rank
+            if main_rank and 'image_url' in VALORANT_RANKS[main_rank]:
+                embed.set_image(url=VALORANT_RANKS[main_rank]['image_url'])
+            
             if current_rank:
                 current_info = VALORANT_RANKS[current_rank]
                 embed.add_field(
@@ -3179,6 +3173,7 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                     inline=False
                 )
             
+            # ユーザーアバターはサムネイルに
             embed.set_thumbnail(url=target_user.display_avatar.url)
             await ctx.send(embed=embed)
             
