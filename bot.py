@@ -2284,77 +2284,77 @@ VALORANT_MAPS = {
         "sites": "A・B",
         "description": "イタリア・ヴェネツィアをモチーフにした標準的なマップ",
         "emoji": "🏛️",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/ascent.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/ascent.png"
     },
     "Bind": {
         "name": "バインド",
         "sites": "A・B",
         "description": "モロッコをモチーフにしたテレポーター付きマップ",
         "emoji": "🕌",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/bind.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/bind.png"
     },
     "Haven": {
         "name": "ヘイヴン",
         "sites": "A・B・C",
         "description": "ブータンをモチーフにした3サイトマップ",
         "emoji": "🏔️",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/haven.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/haven.png"
     },
     "Split": {
         "name": "スプリット",
         "sites": "A・B",
         "description": "日本・東京をモチーフにした縦長マップ",
         "emoji": "🏙️",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/split.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/split.png"
     },
     "Icebox": {
         "name": "アイスボックス",
         "sites": "A・B",
         "description": "ロシア・シベリアをモチーフにした寒冷地マップ",
         "emoji": "🧊",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/icebox.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/icebox.png"
     },
     "Breeze": {
         "name": "ブリーズ",
         "sites": "A・B",
         "description": "カリブ海の島をモチーフにした開放的なマップ",
         "emoji": "🏝️",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/breeze.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/breeze.png"
     },
     "Fracture": {
         "name": "フラクチャー",
         "sites": "A・B",
         "description": "アメリカをモチーフにした特殊構造マップ",
         "emoji": "⚡",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/fracture.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/fracture.png"
     },
     "Pearl": {
         "name": "パール",
         "sites": "A・B",
         "description": "ポルトガル・リスボンをモチーフにした水中都市マップ",
         "emoji": "🐚",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/pearl.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/pearl.png"
     },
     "Lotus": {
         "name": "ロータス",
         "sites": "A・B・C",
         "description": "インドをモチーフにした3サイトマップ",
         "emoji": "🪷",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/lotus.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/lotus.png"
     },
     "Sunset": {
         "name": "サンセット",
         "sites": "A・B",
         "description": "アメリカ・ロサンゼルスをモチーフにしたマップ",
         "emoji": "🌅",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/sunset.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/sunset.png"
     },
     "Abyss": {
         "name": "アビス",
         "sites": "A・B",
         "description": "OMEGA EARTHの実験施設をモチーフにしたマップ",
         "emoji": "🕳️",
-        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/abyss.jpg"
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/abyss.png"
     },
     "Carod": {
         "name": "カロード",
