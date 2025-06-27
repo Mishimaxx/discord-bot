@@ -2283,73 +2283,85 @@ VALORANT_MAPS = {
         "name": "アセント",
         "sites": "A・B",
         "description": "イタリア・ヴェネツィアをモチーフにした標準的なマップ",
-        "emoji": "🏛️"
+        "emoji": "🏛️",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/ascent.jpg"
     },
     "Bind": {
         "name": "バインド",
         "sites": "A・B",
         "description": "モロッコをモチーフにしたテレポーター付きマップ",
-        "emoji": "🕌"
+        "emoji": "🕌",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/bind.jpg"
     },
     "Haven": {
         "name": "ヘイヴン",
         "sites": "A・B・C",
         "description": "ブータンをモチーフにした3サイトマップ",
-        "emoji": "🏔️"
+        "emoji": "🏔️",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/haven.jpg"
     },
     "Split": {
         "name": "スプリット",
         "sites": "A・B",
         "description": "日本・東京をモチーフにした縦長マップ",
-        "emoji": "🏙️"
+        "emoji": "🏙️",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/split.jpg"
     },
     "Icebox": {
         "name": "アイスボックス",
         "sites": "A・B",
         "description": "ロシア・シベリアをモチーフにした寒冷地マップ",
-        "emoji": "🧊"
+        "emoji": "🧊",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/icebox.jpg"
     },
     "Breeze": {
         "name": "ブリーズ",
         "sites": "A・B",
         "description": "カリブ海の島をモチーフにした開放的なマップ",
-        "emoji": "🏝️"
+        "emoji": "🏝️",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/breeze.jpg"
     },
     "Fracture": {
         "name": "フラクチャー",
         "sites": "A・B",
         "description": "アメリカをモチーフにした特殊構造マップ",
-        "emoji": "⚡"
+        "emoji": "⚡",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/fracture.jpg"
     },
     "Pearl": {
         "name": "パール",
         "sites": "A・B",
         "description": "ポルトガル・リスボンをモチーフにした水中都市マップ",
-        "emoji": "🐚"
+        "emoji": "🐚",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/pearl.jpg"
     },
     "Lotus": {
         "name": "ロータス",
         "sites": "A・B・C",
         "description": "インドをモチーフにした3サイトマップ",
-        "emoji": "🪷"
+        "emoji": "🪷",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/lotus.jpg"
     },
     "Sunset": {
         "name": "サンセット",
         "sites": "A・B",
         "description": "アメリカ・ロサンゼルスをモチーフにしたマップ",
-        "emoji": "🌅"
+        "emoji": "🌅",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/sunset.jpg"
     },
     "Abyss": {
         "name": "アビス",
         "sites": "A・B",
         "description": "OMEGA EARTHの実験施設をモチーフにしたマップ",
-        "emoji": "🕳️"
+        "emoji": "🕳️",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/abyss.jpg"
     },
     "Carod": {
         "name": "カロード",
         "sites": "A・B",
         "description": "フランス城下町を舞台にした多層構造マップ",
-        "emoji": "🏰"
+        "emoji": "🏰",
+        "image_url": "https://raw.githubusercontent.com/Mishimaxx/discord-bot/main/images/maps/carod.jpg"
     }
 }
 
@@ -2382,7 +2394,10 @@ async def valorant_map_roulette(ctx, count: int = 1):
             embed.add_field(name="📍 サイト", value=map_info['sites'], inline=True)
             embed.add_field(name="ℹ️ 説明", value=map_info['description'], inline=False)
             
-            # マップ画像のURL（実際のゲーム画像は著作権の関係で使用しない）
+            # マップ画像を表示
+            if 'image_url' in map_info:
+                embed.set_image(url=map_info['image_url'])
+            
             embed.set_footer(text="Good luck, have fun! 🎮")
             
         else:
@@ -2477,6 +2492,10 @@ async def valorant_map_info(ctx, *, map_name=None):
         
         embed.add_field(name="📍 サイト構成", value=map_info['sites'], inline=True)
         embed.add_field(name="🎯 特徴", value=map_info['description'], inline=False)
+        
+        # マップ画像を表示
+        if 'image_url' in map_info:
+            embed.set_image(url=map_info['image_url'])
         
         embed.set_footer(text="!map でランダム選択 | !maplist で全マップ一覧")
         
