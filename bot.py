@@ -546,7 +546,9 @@ async def show_commands(ctx):
         "!team 5v5 - 5対5のチーム分け",
         "!qt [形式] - クイックチーム分け",
         "!vc_team [形式] - VC内メンバーでチーム分け",
-        "!vct [形式] - VC専用チーム分け（短縮版）"
+        "!vct [形式] - VC専用チーム分け（短縮版）",
+        "!rank_team [current/peak] [形式] - ランクバランス調整チーム分け",
+        "!rt [形式] - ランクチーム分け（短縮版）"
     ]
     
     embed.add_field(
@@ -581,7 +583,8 @@ async def show_commands(ctx):
         "!maplist - 全マップ一覧",
         "!mapinfo [マップ名] - マップ詳細情報",
         "!rank - ランク管理システム",
-        "!ranklist - 利用可能ランク一覧"
+        "!ranklist - 利用可能ランク一覧",
+        "!rank_team [current/peak] - VC内ランクバランスチーム分け"
     ]
     
     embed.add_field(
@@ -3350,6 +3353,352 @@ async def start_web_server():
     except Exception as e:
         print(f"❌ Webサーバー起動エラー: {e}")
         return None
+
+@bot.command(name='rank_team', aliases=['rt', 'vc_rank_team'], help='VC内メンバーをランクでバランス調整してチーム分けします')
+@prevent_duplicate_execution
+async def rank_based_team_divide(ctx, rank_type="current", format_type=None):
+    """ランクベースでVC内メンバーをチーム分け"""
+    try:
+        guild = ctx.guild
+        if not guild:
+            await ctx.send("❌ このコマンドはサーバー内でのみ使用できます。")
+            return
+        
+        # ランクタイプのバリデーション
+        if rank_type.lower() not in ["current", "peak", "現在", "最高"]:
+            # 第一引数がフォーマットタイプの場合
+            if rank_type.lower() in ['2v2', '3v3', '5v5', '2v1', '1v1', '4v4']:
+                format_type = rank_type
+                rank_type = "current"
+            else:
+                await ctx.send("❌ ランクタイプは `current`（現在）または `peak`（最高）を指定してください")
+                return
+        
+        # ランクタイプを統一
+        rank_key = "current" if rank_type.lower() in ["current", "現在"] else "peak"
+        rank_display = "現在ランク" if rank_key == "current" else "最高ランク"
+        
+        # VC内メンバーを取得
+        vc_members = []
+        voice_channels_with_members = []
+        
+        for channel in guild.voice_channels:
+            if channel.members:
+                channel_members = [member for member in channel.members if not member.bot]
+                if channel_members:
+                    vc_members.extend(channel_members)
+                    voice_channels_with_members.append(f"🔊 {channel.name} ({len(channel_members)}人)")
+        
+        # 重複除去
+        vc_members = list(set(vc_members))
+        
+        if len(vc_members) < 2:
+            embed = discord.Embed(
+                title="❌ VC内メンバー不足", 
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="現在の状況",
+                value=f"VC内人間メンバー: {len(vc_members)}人\nランクチーム分けには最低2人必要です。",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # メンバーのランク情報を取得
+        ranked_members = []
+        unranked_members = []
+        total_rank_value = 0
+        rank_count = 0
+        
+        for member in vc_members:
+            user_id = member.id
+            if user_id in user_ranks and user_ranks[user_id].get(rank_key):
+                rank_name = user_ranks[user_id][rank_key]
+                rank_value = VALORANT_RANKS[rank_name]['value']
+                ranked_members.append({
+                    'member': member,
+                    'rank': rank_name,
+                    'value': rank_value
+                })
+                total_rank_value += rank_value
+                rank_count += 1
+            else:
+                unranked_members.append(member)
+        
+        # 平均ランク値を計算（未設定者用）
+        if rank_count > 0:
+            avg_rank_value = total_rank_value / rank_count
+        else:
+            avg_rank_value = 300  # シルバー1レベル
+        
+        # 未ランクメンバーを平均ランクとして追加
+        for member in unranked_members:
+            ranked_members.append({
+                'member': member,
+                'rank': None,
+                'value': avg_rank_value
+            })
+        
+        if len(ranked_members) < 2:
+            await ctx.send("❌ チーム分けには最低2人必要です。")
+            return
+        
+        # ランクバランス調整アルゴリズム
+        def balance_teams(members, team_size):
+            """ランク値の合計ができるだけ均等になるようにチーム分け"""
+            members = sorted(members, key=lambda x: x['value'], reverse=True)
+            team1 = []
+            team2 = []
+            
+            for member in members:
+                # 現在のチーム合計値を計算
+                team1_total = sum(m['value'] for m in team1)
+                team2_total = sum(m['value'] for m in team2)
+                
+                # チームサイズ制限もチェック
+                if len(team1) >= team_size:
+                    team2.append(member)
+                elif len(team2) >= team_size:
+                    team1.append(member)
+                else:
+                    # より合計値が低いチームに追加
+                    if team1_total <= team2_total:
+                        team1.append(member)
+                    else:
+                        team2.append(member)
+            
+            return team1, team2
+        
+        # フォーマット別チーム分け
+        embed = discord.Embed(title=f"🎯 ランクバランスチーム分け ({rank_display})", color=0xff4655)
+        
+        if format_type:
+            format_type = format_type.lower()
+            
+            if format_type in ['2v2', '2対2']:
+                if len(ranked_members) < 4:
+                    await ctx.send("❌ 2v2には最低4人必要です。")
+                    return
+                
+                team1, team2 = balance_teams(ranked_members[:4], 2)
+                extras = ranked_members[4:] if len(ranked_members) > 4 else []
+                
+            elif format_type in ['3v3', '3対3']:
+                if len(ranked_members) < 6:
+                    await ctx.send(f"⚠️ 3v3には6人必要ですが、{len(ranked_members)}人しかいません。")
+                    if len(ranked_members) >= 4:
+                        team_size = len(ranked_members) // 2
+                        team1, team2 = balance_teams(ranked_members, team_size)
+                        extras = []
+                    else:
+                        await ctx.send("❌ チーム分けには最低4人必要です。")
+                        return
+                else:
+                    team1, team2 = balance_teams(ranked_members[:6], 3)
+                    extras = ranked_members[6:]
+                
+            elif format_type in ['5v5', '5対5']:
+                if len(ranked_members) < 10:
+                    await ctx.send(f"⚠️ 5v5には10人必要ですが、{len(ranked_members)}人しかいません。")
+                    if len(ranked_members) >= 6:
+                        team_size = len(ranked_members) // 2
+                        team1, team2 = balance_teams(ranked_members, team_size)
+                        extras = []
+                    else:
+                        await ctx.send("❌ チーム分けには最低6人必要です。")
+                        return
+                else:
+                    team1, team2 = balance_teams(ranked_members[:10], 5)
+                    extras = ranked_members[10:]
+                
+            elif format_type in ['2v1', '2対1']:
+                if len(ranked_members) < 3:
+                    await ctx.send("❌ 2v1には最低3人必要です。")
+                    return
+                
+                # 2v1は特別処理（最強者1人 vs 他2人）
+                sorted_members = sorted(ranked_members, key=lambda x: x['value'], reverse=True)
+                team1 = sorted_members[1:3]  # 2-3位
+                team2 = [sorted_members[0]]   # 1位
+                extras = sorted_members[3:] if len(sorted_members) > 3 else []
+                
+            elif format_type in ['1v1', '1対1']:
+                if len(ranked_members) < 2:
+                    await ctx.send("❌ 1v1には最低2人必要です。")
+                    return
+                
+                # 1v1は最もランクが近い者同士
+                sorted_members = sorted(ranked_members, key=lambda x: x['value'], reverse=True)
+                team1 = [sorted_members[0]]
+                team2 = [sorted_members[1]]
+                extras = sorted_members[2:]
+                
+            elif format_type in ['4v4', '4対4']:
+                if len(ranked_members) < 8:
+                    await ctx.send(f"⚠️ 4v4には8人必要ですが、{len(ranked_members)}人しかいません。")
+                    if len(ranked_members) >= 6:
+                        team_size = len(ranked_members) // 2
+                        team1, team2 = balance_teams(ranked_members, team_size)
+                        extras = []
+                    else:
+                        await ctx.send("❌ チーム分けには最低6人必要です。")
+                        return
+                else:
+                    team1, team2 = balance_teams(ranked_members[:8], 4)
+                    extras = ranked_members[8:]
+            else:
+                await ctx.send("❌ 対応していない形式です。使用可能: `2v1`, `3v3`, `2v2`, `1v1`, `4v4`, `5v5`")
+                return
+        else:
+            # 自動フォーマット選択
+            member_count = len(ranked_members)
+            
+            if member_count >= 10:
+                team1, team2 = balance_teams(ranked_members[:10], 5)
+                extras = ranked_members[10:]
+                format_type = "5v5"
+            elif member_count >= 8:
+                team1, team2 = balance_teams(ranked_members[:8], 4)
+                extras = ranked_members[8:]
+                format_type = "4v4"
+            elif member_count >= 6:
+                team1, team2 = balance_teams(ranked_members[:6], 3)
+                extras = ranked_members[6:]
+                format_type = "3v3"
+            elif member_count >= 4:
+                team1, team2 = balance_teams(ranked_members[:4], 2)
+                extras = ranked_members[4:]
+                format_type = "2v2"
+            elif member_count == 3:
+                sorted_members = sorted(ranked_members, key=lambda x: x['value'], reverse=True)
+                team1 = sorted_members[1:3]
+                team2 = [sorted_members[0]]
+                extras = []
+                format_type = "2v1"
+            else:
+                sorted_members = sorted(ranked_members, key=lambda x: x['value'], reverse=True)
+                team1 = [sorted_members[0]]
+                team2 = [sorted_members[1]]
+                extras = []
+                format_type = "1v1"
+        
+        # チーム情報を表示
+        def format_team_info(team, team_name, team_color):
+            if not team:
+                return
+            
+            team_display = []
+            team_total = 0
+            rank_counts = {}
+            
+            for member_data in team:
+                member = member_data['member']
+                rank = member_data['rank']
+                value = member_data['value']
+                team_total += value
+                
+                if rank:
+                    rank_info = VALORANT_RANKS[rank]
+                    member_display = f"• {member.display_name} ({rank_info['display']})"
+                    rank_counts[rank_info['display']] = rank_counts.get(rank_info['display'], 0) + 1
+                else:
+                    member_display = f"• {member.display_name} (ランク未設定)"
+                    rank_counts['ランク未設定'] = rank_counts.get('ランク未設定', 0) + 1
+                
+                team_display.append(member_display)
+            
+            avg_rank = team_total / len(team) if team else 0
+            
+            embed.add_field(
+                name=f"{team_color} {team_name} ({len(team)}人)",
+                value="\n".join(team_display),
+                inline=True
+            )
+            
+            # チーム平均ランク値を表示
+            embed.add_field(
+                name=f"📊 {team_name} 平均値",
+                value=f"{avg_rank:.0f}",
+                inline=True
+            )
+            
+            return avg_rank
+        
+        # チーム1の情報
+        avg1 = format_team_info(team1, "チーム1", "🔴")
+        
+        # スペーサー（3列レイアウト用）
+        embed.add_field(name="", value="", inline=True)
+        
+        # チーム2の情報
+        avg2 = format_team_info(team2, "チーム2", "🔵")
+        
+        # バランス情報
+        balance_diff = abs(avg1 - avg2) if avg1 and avg2 else 0
+        balance_quality = "完璧" if balance_diff < 50 else "良好" if balance_diff < 100 else "やや偏り" if balance_diff < 150 else "偏りあり"
+        
+        embed.add_field(
+            name="⚖️ バランス評価",
+            value=f"{balance_quality} (差: {balance_diff:.0f})",
+            inline=False
+        )
+        
+        # 待機メンバー
+        if extras:
+            extras_display = []
+            for member_data in extras:
+                member = member_data['member']
+                rank = member_data['rank']
+                if rank:
+                    rank_info = VALORANT_RANKS[rank]
+                    extras_display.append(f"• {member.display_name} ({rank_info['display']})")
+                else:
+                    extras_display.append(f"• {member.display_name} (ランク未設定)")
+            
+            embed.add_field(
+                name="⚪ 待機",
+                value="\n".join(extras_display),
+                inline=False
+            )
+        
+        # 統計情報
+        ranked_count = len([m for m in ranked_members if m['rank']])
+        unranked_count = len(unranked_members)
+        
+        embed.add_field(
+            name="📊 統計情報",
+            value=f"基準: {rank_display}\n"
+                  f"ランク設定済み: {ranked_count}人\n"
+                  f"未設定: {unranked_count}人\n"
+                  f"形式: {format_type}",
+            inline=False
+        )
+        
+        # VC情報
+        if voice_channels_with_members:
+            embed.add_field(
+                name="🎤 対象VC", 
+                value="\n".join(voice_channels_with_members), 
+                inline=False
+            )
+        
+        embed.set_footer(text=f"🎯 ランクバランス調整 | 未設定者は平均ランク({avg_rank_value:.0f})として計算")
+        
+        await ctx.send(embed=embed)
+        
+        # 追加メッセージ
+        balance_msg = "⚖️ ランクバランスを考慮したチーム分けを行いました！"
+        if unranked_count > 0:
+            balance_msg += f"\n💡 {unranked_count}人がランク未設定のため、平均ランクで計算しています。"
+        
+        await ctx.send(balance_msg)
+        
+    except Exception as e:
+        await ctx.send(f"❌ ランクベースチーム分けでエラーが発生しました: {str(e)}")
+        print(f"ランクベースチーム分けエラー: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Botを起動
 if __name__ == "__main__":
