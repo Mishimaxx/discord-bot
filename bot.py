@@ -2947,6 +2947,11 @@ def parse_rank_input(rank_input):
     """ランク入力をパース"""
     rank_input = rank_input.strip()
     
+    # 前処理：スペース削除、全角数字を半角に変換
+    rank_input = rank_input.replace(" ", "").replace("　", "")  # 半角・全角スペース削除
+    rank_input = rank_input.replace("１", "1").replace("２", "2").replace("３", "3")  # 全角数字変換
+    rank_input = rank_input.replace("ダイヤモンド", "ダイヤ")  # 「ダイヤモンド」→「ダイヤ」変換
+    
     # 完全一致チェック
     for rank_key in VALORANT_RANKS.keys():
         if rank_input.lower() == rank_key.lower():
@@ -3023,8 +3028,8 @@ async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
             )
             
             embed.add_field(
-                name="🏆 ランク例",
-                value="レディアント, イモータル3, アセンダント2, ダイヤ1, プラチナ3, ゴールド2, シルバー1, ブロンズ3, アイアン1",
+                name="🏆 ランク入力例",
+                value="• `ダイヤ2`, `ダイヤモンド ２`\n• `イモータル3`, `imm3`\n• `プラチナ1`, `plat1`\n• `レディアント`, `radiant`\n※ スペースや全角数字も対応",
                 inline=False
             )
             
@@ -3222,7 +3227,9 @@ async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
             
     except Exception as e:
         print(f"ランクシステムエラー: {e}")
-        await ctx.send("❌ ランクシステムでエラーが発生しました。")
+        import traceback
+        traceback.print_exc()
+        await ctx.send(f"❌ ランクシステムでエラーが発生しました: {str(e)}\n\n使用方法: `!rank set current/peak [ランク名]`\n例: `!rank set current ダイヤ2`")
 
 @bot.command(name='ranklist', aliases=['ranks'], help='利用可能なVALORANTランク一覧を表示します')
 @prevent_duplicate_execution
