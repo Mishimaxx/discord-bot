@@ -39,7 +39,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  # メンバー情報取得に必要（Developer Portalで有効化済み前提）
 # intents.presences = True  # ステータス情報取得に必要（要Developer Portal設定）
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)  # デフォルトhelpコマンドを無効化
 
 # メンバー管理用のデータ構造
 member_stats_dict = {}
@@ -323,12 +323,27 @@ async def hello(ctx):
 @bot.command(name='ping', help='Botの応答速度を確認します')
 async def ping(ctx):
     """Pingコマンド - Botのレイテンシを表示"""
+    # 重複実行防止
+    message_id = ctx.message.id
+    if message_id in processed_messages:
+        print(f"重複実行防止: ping コマンド - メッセージID {message_id} は既に処理済み")
+        return
+    processed_messages.add(message_id)
+    
     latency = round(bot.latency * 1000)
     await ctx.send(f'🏓 Pong! レイテンシ: {latency}ms')
 
+@bot.command(name='help', help='利用可能なコマンド一覧を表示')
 @bot.command(name='commands', help='利用可能なコマンド一覧を表示')
 async def show_commands(ctx):
     """利用可能なコマンドを表示"""
+    # 重複実行防止
+    message_id = ctx.message.id
+    if message_id in processed_messages:
+        print(f"重複実行防止: help/commands コマンド - メッセージID {message_id} は既に処理済み")
+        return
+    processed_messages.add(message_id)
+    
     embed = discord.Embed(title="🤖 リオンのコマンド一覧", color=0x00ff00)
     
     # チーム分けコマンド
