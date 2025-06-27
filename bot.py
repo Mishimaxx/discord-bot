@@ -3016,7 +3016,7 @@ def parse_rank_input(rank_input):
 
 @bot.command(name='rank', help='VALORANTランクを管理します（例: !rank set current ダイヤ2, !rank show）')
 @prevent_duplicate_execution
-async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
+async def rank_system(ctx, action=None, rank_type=None, *rank_input):
     """VALORANTランクシステム"""
     try:
         print(f"🔍 Rank command called: action={action}, rank_type={rank_type}, rank_input={rank_input}")
@@ -3061,9 +3061,12 @@ async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
                 await ctx.send("❌ ランクタイプは `current`（現在）または `peak`（最高）を指定してください")
                 return
             
+            # rank_inputをtupleから文字列に変換
+            rank_input_str = " ".join(rank_input) if rank_input else ""
+            print(f"🔍 About to parse rank input: '{rank_input_str}'")
+            
             # ランクをパース
-            print(f"🔍 About to parse rank input: '{rank_input}'")
-            parsed_rank = parse_rank_input(rank_input)
+            parsed_rank = parse_rank_input(rank_input_str)
             print(f"🔍 Parsed rank result: '{parsed_rank}'")
             
             if not parsed_rank:
