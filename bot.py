@@ -579,7 +579,9 @@ async def show_commands(ctx):
         "!valorant_match [RiotID#Tag] - 試合履歴",
         "!map [数] - マップルーレット",
         "!maplist - 全マップ一覧",
-        "!mapinfo [マップ名] - マップ詳細情報"
+        "!mapinfo [マップ名] - マップ詳細情報",
+        "!rank - ランク管理システム",
+        "!ranklist - 利用可能ランク一覧"
     ]
     
     embed.add_field(
@@ -2908,6 +2910,369 @@ async def valorant_map_info(ctx, *, map_name=None):
     except Exception as e:
         print(f"マップ情報エラー: {e}")
         await ctx.send("❌ マップ情報の表示でエラーが発生しました。")
+
+# VALORANTランクシステム
+VALORANT_RANKS = {
+    "レディアント": {"tier": 9, "display": "🔥 レディアント", "value": 900, "color": 0xFFFFFF},
+    "イモータル3": {"tier": 8, "display": "💎 イモータル 3", "value": 803, "color": 0xBA55D3},
+    "イモータル2": {"tier": 8, "display": "💎 イモータル 2", "value": 802, "color": 0xBA55D3},
+    "イモータル1": {"tier": 8, "display": "💎 イモータル 1", "value": 801, "color": 0xBA55D3},
+    "アセンダント3": {"tier": 7, "display": "🔆 アセンダント 3", "value": 703, "color": 0x32CD32},
+    "アセンダント2": {"tier": 7, "display": "🔆 アセンダント 2", "value": 702, "color": 0x32CD32},
+    "アセンダント1": {"tier": 7, "display": "🔆 アセンダント 1", "value": 701, "color": 0x32CD32},
+    "ダイヤ3": {"tier": 6, "display": "💠 ダイヤモンド 3", "value": 603, "color": 0x87CEEB},
+    "ダイヤ2": {"tier": 6, "display": "💠 ダイヤモンド 2", "value": 602, "color": 0x87CEEB},
+    "ダイヤ1": {"tier": 6, "display": "💠 ダイヤモンド 1", "value": 601, "color": 0x87CEEB},
+    "プラチナ3": {"tier": 5, "display": "🔷 プラチナ 3", "value": 503, "color": 0x40E0D0},
+    "プラチナ2": {"tier": 5, "display": "🔷 プラチナ 2", "value": 502, "color": 0x40E0D0},
+    "プラチナ1": {"tier": 5, "display": "🔷 プラチナ 1", "value": 501, "color": 0x40E0D0},
+    "ゴールド3": {"tier": 4, "display": "🟡 ゴールド 3", "value": 403, "color": 0xFFD700},
+    "ゴールド2": {"tier": 4, "display": "🟡 ゴールド 2", "value": 402, "color": 0xFFD700},
+    "ゴールド1": {"tier": 4, "display": "🟡 ゴールド 1", "value": 401, "color": 0xFFD700},
+    "シルバー3": {"tier": 3, "display": "⚪ シルバー 3", "value": 303, "color": 0xC0C0C0},
+    "シルバー2": {"tier": 3, "display": "⚪ シルバー 2", "value": 302, "color": 0xC0C0C0},
+    "シルバー1": {"tier": 3, "display": "⚪ シルバー 1", "value": 301, "color": 0xC0C0C0},
+    "ブロンズ3": {"tier": 2, "display": "🟤 ブロンズ 3", "value": 203, "color": 0xCD7F32},
+    "ブロンズ2": {"tier": 2, "display": "🟤 ブロンズ 2", "value": 202, "color": 0xCD7F32},
+    "ブロンズ1": {"tier": 2, "display": "🟤 ブロンズ 1", "value": 201, "color": 0xCD7F32},
+    "アイアン3": {"tier": 1, "display": "⚫ アイアン 3", "value": 103, "color": 0x696969},
+    "アイアン2": {"tier": 1, "display": "⚫ アイアン 2", "value": 102, "color": 0x696969},
+    "アイアン1": {"tier": 1, "display": "⚫ アイアン 1", "value": 101, "color": 0x696969}
+}
+
+# ユーザーランク情報ストレージ
+user_ranks = {}  # {user_id: {"current": "rank", "peak": "rank", "updated": datetime}}
+
+def parse_rank_input(rank_input):
+    """ランク入力をパース"""
+    rank_input = rank_input.strip()
+    
+    # 完全一致チェック
+    for rank_key in VALORANT_RANKS.keys():
+        if rank_input.lower() == rank_key.lower():
+            return rank_key
+    
+    # 部分一致チェック（ランク名のみ）
+    rank_mappings = {
+        "レディアント": "レディアント",
+        "radiant": "レディアント",
+        "rad": "レディアント",
+        "イモータル": ["イモータル3", "イモータル2", "イモータル1"],
+        "immortal": ["イモータル3", "イモータル2", "イモータル1"],
+        "imm": ["イモータル3", "イモータル2", "イモータル1"],
+        "アセンダント": ["アセンダント3", "アセンダント2", "アセンダント1"],
+        "ascendant": ["アセンダント3", "アセンダント2", "アセンダント1"],
+        "asc": ["アセンダント3", "アセンダント2", "アセンダント1"],
+        "ダイヤ": ["ダイヤ3", "ダイヤ2", "ダイヤ1"],
+        "diamond": ["ダイヤ3", "ダイヤ2", "ダイヤ1"],
+        "dia": ["ダイヤ3", "ダイヤ2", "ダイヤ1"],
+        "プラチナ": ["プラチナ3", "プラチナ2", "プラチナ1"],
+        "platinum": ["プラチナ3", "プラチナ2", "プラチナ1"],
+        "plat": ["プラチナ3", "プラチナ2", "プラチナ1"],
+        "ゴールド": ["ゴールド3", "ゴールド2", "ゴールド1"],
+        "gold": ["ゴールド3", "ゴールド2", "ゴールド1"],
+        "シルバー": ["シルバー3", "シルバー2", "シルバー1"],
+        "silver": ["シルバー3", "シルバー2", "シルバー1"],
+        "sil": ["シルバー3", "シルバー2", "シルバー1"],
+        "ブロンズ": ["ブロンズ3", "ブロンズ2", "ブロンズ1"],
+        "bronze": ["ブロンズ3", "ブロンズ2", "ブロンズ1"],
+        "bro": ["ブロンズ3", "ブロンズ2", "ブロンズ1"],
+        "アイアン": ["アイアン3", "アイアン2", "アイアン1"],
+        "iron": ["アイアン3", "アイアン2", "アイアン1"]
+    }
+    
+    # 数字付きランクチェック
+    for base_name, ranks in rank_mappings.items():
+        if isinstance(ranks, list):
+            if rank_input.lower().startswith(base_name.lower()):
+                # 数字を抽出
+                for i in range(3, 0, -1):
+                    if str(i) in rank_input:
+                        return ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
+                # 数字がない場合は最高ランク（3）
+                return ranks[0]
+        else:
+            if rank_input.lower().startswith(base_name.lower()):
+                return ranks
+    
+    return None
+
+@bot.command(name='rank', help='VALORANTランクを管理します（例: !rank set current ダイヤ2, !rank show）')
+@prevent_duplicate_execution
+async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
+    """VALORANTランクシステム"""
+    try:
+        if not action:
+            # ヘルプ表示
+            embed = discord.Embed(
+                title="🎯 VALORANTランクシステム",
+                description="現在ランクと最高ランクを管理できます",
+                color=0xff4655
+            )
+            
+            embed.add_field(
+                name="📝 ランク設定",
+                value="`!rank set current [ランク]` - 現在ランク設定\n`!rank set peak [ランク]` - 最高ランク設定",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📊 ランク表示",
+                value="`!rank show` - 自分のランク表示\n`!rank show @ユーザー` - 他人のランク表示\n`!rank list` - サーバー内ランキング",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🏆 ランク例",
+                value="レディアント, イモータル3, アセンダント2, ダイヤ1, プラチナ3, ゴールド2, シルバー1, ブロンズ3, アイアン1",
+                inline=False
+            )
+            
+            embed.set_footer(text="例: !rank set current ダイヤ2")
+            await ctx.send(embed=embed)
+            return
+        
+        if action.lower() == "set":
+            if not rank_type or not rank_input:
+                await ctx.send("❌ 使用方法: `!rank set current/peak [ランク名]`")
+                return
+            
+            if rank_type.lower() not in ["current", "peak", "現在", "最高"]:
+                await ctx.send("❌ ランクタイプは `current`（現在）または `peak`（最高）を指定してください")
+                return
+            
+            # ランクをパース
+            parsed_rank = parse_rank_input(rank_input)
+            if not parsed_rank:
+                rank_list = ", ".join(list(VALORANT_RANKS.keys())[:10]) + "..."
+                await ctx.send(f"❌ 無効なランクです。利用可能なランク: {rank_list}")
+                return
+            
+            user_id = ctx.author.id
+            if user_id not in user_ranks:
+                user_ranks[user_id] = {"current": None, "peak": None, "updated": datetime.now()}
+            
+            # ランクタイプを統一
+            rank_type_key = "current" if rank_type.lower() in ["current", "現在"] else "peak"
+            old_rank = user_ranks[user_id].get(rank_type_key)
+            
+            user_ranks[user_id][rank_type_key] = parsed_rank
+            user_ranks[user_id]["updated"] = datetime.now()
+            
+            rank_info = VALORANT_RANKS[parsed_rank]
+            type_display = "現在ランク" if rank_type_key == "current" else "最高ランク"
+            
+            embed = discord.Embed(
+                title="✅ ランク設定完了",
+                description=f"{type_display}を **{rank_info['display']}** に設定しました",
+                color=rank_info['color']
+            )
+            
+            if old_rank and old_rank != parsed_rank:
+                old_info = VALORANT_RANKS[old_rank]
+                embed.add_field(
+                    name="📈 変更",
+                    value=f"{old_info['display']} → {rank_info['display']}",
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"更新者: {ctx.author.display_name}")
+            await ctx.send(embed=embed)
+            
+        elif action.lower() == "show":
+            # ユーザー指定の確認
+            target_user = ctx.author
+            if rank_type:
+                # メンション解析
+                if ctx.message.mentions:
+                    target_user = ctx.message.mentions[0]
+                else:
+                    await ctx.send("❌ ユーザーが見つかりません。`@ユーザー名` でメンションしてください。")
+                    return
+            
+            user_id = target_user.id
+            if user_id not in user_ranks or (not user_ranks[user_id]["current"] and not user_ranks[user_id]["peak"]):
+                if target_user == ctx.author:
+                    await ctx.send("❌ ランクが設定されていません。`!rank set current [ランク]` で設定してください。")
+                else:
+                    await ctx.send(f"❌ {target_user.display_name} のランクは設定されていません。")
+                return
+            
+            user_data = user_ranks[user_id]
+            current_rank = user_data.get("current")
+            peak_rank = user_data.get("peak")
+            
+            # 表示色を決定（現在ランクがあればそれを、なければピークランクを使用）
+            display_color = 0xff4655
+            if current_rank:
+                display_color = VALORANT_RANKS[current_rank]['color']
+            elif peak_rank:
+                display_color = VALORANT_RANKS[peak_rank]['color']
+            
+            embed = discord.Embed(
+                title=f"🎯 {target_user.display_name} のVALORANTランク",
+                color=display_color
+            )
+            
+            if current_rank:
+                current_info = VALORANT_RANKS[current_rank]
+                embed.add_field(
+                    name="📊 現在ランク",
+                    value=current_info['display'],
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name="📊 現在ランク",
+                    value="未設定",
+                    inline=True
+                )
+            
+            if peak_rank:
+                peak_info = VALORANT_RANKS[peak_rank]
+                embed.add_field(
+                    name="🏆 最高ランク",
+                    value=peak_info['display'],
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name="🏆 最高ランク",
+                    value="未設定",
+                    inline=True
+                )
+            
+            # 最終更新日時
+            if "updated" in user_data:
+                embed.add_field(
+                    name="📅 最終更新",
+                    value=user_data["updated"].strftime("%Y/%m/%d %H:%M"),
+                    inline=False
+                )
+            
+            embed.set_thumbnail(url=target_user.display_avatar.url)
+            await ctx.send(embed=embed)
+            
+        elif action.lower() == "list":
+            # サーバー内ランキング表示
+            guild_members = [member.id for member in ctx.guild.members if not member.bot]
+            ranked_users = []
+            
+            for user_id in guild_members:
+                if user_id in user_ranks:
+                    user_data = user_ranks[user_id]
+                    current_rank = user_data.get("current")
+                    peak_rank = user_data.get("peak")
+                    
+                    # 現在ランクを優先、なければピークランク
+                    display_rank = current_rank if current_rank else peak_rank
+                    if display_rank:
+                        user = ctx.guild.get_member(user_id)
+                        if user:
+                            rank_value = VALORANT_RANKS[display_rank]['value']
+                            ranked_users.append((user, display_rank, rank_value, current_rank, peak_rank))
+            
+            if not ranked_users:
+                await ctx.send("❌ このサーバーにはランクを設定したユーザーがいません。")
+                return
+            
+            # ランクでソート（降順）
+            ranked_users.sort(key=lambda x: x[2], reverse=True)
+            
+            embed = discord.Embed(
+                title="🏆 サーバー内VALORANTランキング",
+                description=f"登録者数: {len(ranked_users)}人",
+                color=0xff4655
+            )
+            
+            # 上位15人まで表示
+            for i, (user, display_rank, rank_value, current, peak) in enumerate(ranked_users[:15], 1):
+                rank_info = VALORANT_RANKS[display_rank]
+                
+                # メダル表示
+                medal = ""
+                if i == 1:
+                    medal = "🥇 "
+                elif i == 2:
+                    medal = "🥈 "
+                elif i == 3:
+                    medal = "🥉 "
+                else:
+                    medal = f"{i}. "
+                
+                # ランク詳細
+                rank_detail = rank_info['display']
+                if current and peak and current != peak:
+                    peak_info = VALORANT_RANKS[peak]
+                    rank_detail += f" (最高: {peak_info['display']})"
+                
+                embed.add_field(
+                    name=f"{medal}{user.display_name}",
+                    value=rank_detail,
+                    inline=False
+                )
+            
+            if len(ranked_users) > 15:
+                embed.set_footer(text=f"他 {len(ranked_users) - 15}人のランクユーザー")
+            
+            await ctx.send(embed=embed)
+            
+        else:
+            await ctx.send("❌ 無効なアクション。利用可能: `set`, `show`, `list`")
+            
+    except Exception as e:
+        print(f"ランクシステムエラー: {e}")
+        await ctx.send("❌ ランクシステムでエラーが発生しました。")
+
+@bot.command(name='ranklist', aliases=['ranks'], help='利用可能なVALORANTランク一覧を表示します')
+@prevent_duplicate_execution
+async def rank_list(ctx):
+    """利用可能なランク一覧表示"""
+    try:
+        embed = discord.Embed(
+            title="🎯 VALORANT ランク一覧",
+            description="設定可能なランク（上位から順番）",
+            color=0xff4655
+        )
+        
+        # ランクを価値順にソート
+        sorted_ranks = sorted(VALORANT_RANKS.items(), key=lambda x: x[1]['value'], reverse=True)
+        
+        rank_display = []
+        current_tier = None
+        
+        for rank_key, rank_info in sorted_ranks:
+            if current_tier != rank_info['tier']:
+                if rank_display:  # 前のティアがある場合は改行追加
+                    rank_display.append("")
+                current_tier = rank_info['tier']
+            
+            rank_display.append(rank_info['display'])
+        
+        # 3つのフィールドに分けて表示
+        chunks = [rank_display[i:i+9] for i in range(0, len(rank_display), 9)]
+        
+        for i, chunk in enumerate(chunks):
+            field_name = f"🏆 ランク一覧 {i+1}" if len(chunks) > 1 else "🏆 ランク一覧"
+            embed.add_field(
+                name=field_name,
+                value="\n".join(chunk),
+                inline=True
+            )
+        
+        embed.add_field(
+            name="📝 使用方法",
+            value="`!rank set current ダイヤ2`\n`!rank set peak レディアント`",
+            inline=False
+        )
+        
+        embed.set_footer(text="略語も使用可能: imm3, dia1, plat2, gold3など")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"ランク一覧エラー: {e}")
+        await ctx.send("❌ ランク一覧の表示でエラーが発生しました。")
 
 # Render.com Web Service対応のHTTPサーバー
 async def handle_health(request):
