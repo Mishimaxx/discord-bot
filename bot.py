@@ -30,6 +30,30 @@ processed_messages = set()  # 処理済みメッセージIDの記録
 user_message_cache = {}  # ユーザー別の最後のメッセージ内容とタイムスタンプ
 command_executing = {}  # コマンド実行中フラグ（ユーザーID: コマンド名）
 
+# 重複実行防止デコレーター
+def prevent_duplicate_execution(func):
+    """全コマンドに統一的な重複実行防止を適用するデコレーター"""
+    async def wrapper(ctx, *args, **kwargs):
+        # ユーザーIDベースの実行中チェック
+        user_id = ctx.author.id
+        command_name = func.__name__
+        
+        if user_id in command_executing:
+            await ctx.send(f"⚠️ 他のコマンドが実行中です。少しお待ちください。")
+            return
+        
+        # 実行中フラグを設定
+        command_executing[user_id] = command_name
+        
+        try:
+            # 元のコマンドを実行
+            await func(ctx, *args, **kwargs)
+        finally:
+            # 実行中フラグをクリア
+            command_executing.pop(user_id, None)
+    
+    return wrapper
+
 # 会話履歴管理
 conversation_history = {}  # チャンネルIDごとの会話履歴
 MAX_HISTORY_LENGTH = 10   # 保存する会話数の上限
@@ -316,33 +340,22 @@ async def handle_team_request(message):
         command_executing.pop(message.author.id, None)
 
 @bot.command(name='hello', help='挨拶をします')
+@prevent_duplicate_execution
 async def hello(ctx):
     """簡単な挨拶コマンド"""
     await ctx.send(f'こんにちは、{ctx.author.mention}さん！')
 
 @bot.command(name='ping', help='Botの応答速度を確認します')
+@prevent_duplicate_execution
 async def ping(ctx):
     """Pingコマンド - Botのレイテンシを表示"""
-    # 重複実行防止
-    message_id = ctx.message.id
-    if message_id in processed_messages:
-        print(f"重複実行防止: ping コマンド - メッセージID {message_id} は既に処理済み")
-        return
-    processed_messages.add(message_id)
-    
     latency = round(bot.latency * 1000)
     await ctx.send(f'🏓 Pong! レイテンシ: {latency}ms')
 
-@bot.command(name='help', help='利用可能なコマンド一覧を表示')
-@bot.command(name='commands', help='利用可能なコマンド一覧を表示')
+@bot.command(name='help', aliases=['commands'], help='利用可能なコマンド一覧を表示')
+@prevent_duplicate_execution
 async def show_commands(ctx):
     """利用可能なコマンドを表示"""
-    # 重複実行防止
-    message_id = ctx.message.id
-    if message_id in processed_messages:
-        print(f"重複実行防止: help/commands コマンド - メッセージID {message_id} は既に処理済み")
-        return
-    processed_messages.add(message_id)
     
     embed = discord.Embed(title="🤖 リオンのコマンド一覧", color=0x00ff00)
     
@@ -408,6 +421,7 @@ async def show_commands(ctx):
     await ctx.send(embed=embed)
 
 @bot.command(name='info', help='詳細なサーバー情報を表示します')
+@prevent_duplicate_execution
 async def server_info(ctx):
     """詳細なサーバー情報を表示"""
     guild = ctx.guild
@@ -469,6 +483,7 @@ async def server_info(ctx):
         await ctx.send("❌ このコマンドはサーバー内でのみ使用できます。")
 
 @bot.command(name='dice', help='サイコロを振ります（例: !dice 6）')
+@prevent_duplicate_execution
 async def roll_dice(ctx, sides: int = 6):
     """サイコロを振るコマンド"""
     import random
@@ -481,6 +496,7 @@ async def roll_dice(ctx, sides: int = 6):
     await ctx.send(f'🎲 {sides}面サイコロの結果: **{result}**')
 
 @bot.command(name='userinfo', help='ユーザー情報を表示します')
+@prevent_duplicate_execution
 async def user_info(ctx, member: discord.Member = None):
     """ユーザー情報を表示"""
     if member is None:
@@ -501,6 +517,7 @@ async def user_info(ctx, member: discord.Member = None):
     await ctx.send(embed=embed)
 
 @bot.command(name='members', help='詳細なメンバー統計を表示します')
+@prevent_duplicate_execution
 async def member_stats(ctx):
     """詳細なメンバー統計を表示"""
     guild = ctx.guild
@@ -577,6 +594,7 @@ async def member_stats(ctx):
         print(f"メンバー統計エラー: {e}")
 
 @bot.command(name='channels', help='チャンネル一覧と詳細を表示します')
+@prevent_duplicate_execution
 async def channel_info(ctx):
     """チャンネル情報を表示"""
     guild = ctx.guild
@@ -641,6 +659,7 @@ def check_rate_limit(user_id):
     return True, 0
 
 @bot.command(name='ai', help='Gemini AIと会話します（例: !ai こんにちは）')
+@prevent_duplicate_execution
 async def ask_ai(ctx, *, question):
     """Gemini AIに質問するコマンド"""
     try:
@@ -772,6 +791,7 @@ async def ask_ai(ctx, *, question):
         print(f"Gemini AI エラー: {e}")
 
 @bot.command(name='translate', help='テキストを翻訳します（例: !translate Hello）')
+@prevent_duplicate_execution
 async def translate_text(ctx, *, text):
     """テキスト翻訳コマンド"""
     try:
@@ -796,6 +816,7 @@ async def translate_text(ctx, *, text):
         await thinking_msg.edit(content=f"❌ 翻訳エラー: {str(e)}")
 
 @bot.command(name='summarize', help='テキストを要約します（例: !summarize 長いテキスト...）')
+@prevent_duplicate_execution
 async def summarize_text(ctx, *, text):
     """テキスト要約コマンド"""
     try:
@@ -819,6 +840,7 @@ async def summarize_text(ctx, *, text):
         await thinking_msg.edit(content=f"❌ 要約エラー: {str(e)}")
 
 @bot.command(name='expert', help='専門的な質問に詳しく回答します（例: !expert 量子コンピュータについて）')
+@prevent_duplicate_execution
 async def expert_mode(ctx, *, question):
     """エキスパートモード - より詳細で専門的な回答"""
     try:
@@ -877,6 +899,7 @@ async def expert_mode(ctx, *, question):
         await thinking_msg.edit(content=f"❌ エキスパートモードエラー: {str(e)}")
 
 @bot.command(name='creative', help='創作や想像力を使った回答をします（例: !creative 未来の世界を描いて）')
+@prevent_duplicate_execution
 async def creative_mode(ctx, *, prompt):
     """クリエイティブモード - 創造性重視の回答"""
     try:
@@ -929,6 +952,7 @@ async def creative_mode(ctx, *, prompt):
         await thinking_msg.edit(content=f"❌ クリエイティブモードエラー: {str(e)}")
 
 @bot.command(name='history', help='このチャンネルの会話履歴を表示します')
+@prevent_duplicate_execution
 async def show_history(ctx):
     """会話履歴を表示"""
     channel_id = ctx.channel.id
@@ -963,6 +987,7 @@ async def show_history(ctx):
         await ctx.send(embed=embed)
 
 @bot.command(name='clear_history', help='このチャンネルの会話履歴をクリアします')
+@prevent_duplicate_execution
 async def clear_history(ctx):
     """会話履歴をクリア"""
     channel_id = ctx.channel.id
@@ -974,6 +999,7 @@ async def clear_history(ctx):
         await ctx.send("📝 このチャンネルには会話履歴がありません。")
 
 @bot.command(name='usage', help='AI使用量と制限情報を表示します')
+@prevent_duplicate_execution
 async def show_usage(ctx):
     """AI使用量情報を表示"""
     embed = discord.Embed(
@@ -1047,6 +1073,7 @@ async def get_valorant_stats(riot_id, tag):
         return None, f"接続エラー: {str(e)}"
 
 @bot.command(name='valorant', help='VALORANT統計を表示します（例: !valorant PlayerName#1234）')
+@prevent_duplicate_execution
 async def valorant_stats(ctx, *, riot_id=None):
     """VALORANT統計表示コマンド"""
     if not riot_id:
@@ -1217,6 +1244,7 @@ async def valorant_stats(ctx, *, riot_id=None):
         await loading_msg.edit(content=f"❌ エラーが発生しました: {str(e)}")
 
 @bot.command(name='valorant_match', help='直近のVALORANT試合履歴を表示します（例: !valorant_match PlayerName#1234）')
+@prevent_duplicate_execution
 async def valorant_matches(ctx, *, riot_id=None):
     try:
         if not riot_id:
@@ -1317,30 +1345,14 @@ async def valorant_matches(ctx, *, riot_id=None):
         await ctx.send(f"❌ エラーが発生しました: {str(e)}")
 
 @bot.command(name='team', help='メンバーをランダムでチーム分けします（例: !team 2v1, !team 3v3, !team）')
+@prevent_duplicate_execution
 async def team_divide(ctx, format_type=None):
     """チーム分け機能"""
     try:
-        # 実行中チェック（auto_teamとteamの両方をチェック）
-        user_id = ctx.author.id
-        if (user_id in command_executing and 
-            command_executing[user_id] in ['team', 'auto_team']):
-            await ctx.send("⚠️ チーム分けコマンドが既に実行中です。少しお待ちください。")
-            return
-        
-        # メッセージIDベースの重複チェック
-        message_id = ctx.message.id
-        if message_id in processed_messages:
-            print(f"重複実行防止: team コマンド - メッセージID {message_id} は既に処理済み")
-            return
-        processed_messages.add(message_id)
-        
-        # 実行中フラグを設定
-        command_executing[user_id] = 'team'
-        
         # レート制限チェック
+        user_id = ctx.author.id
         allowed, wait_time = check_rate_limit(user_id)
         if not allowed:
-            command_executing.pop(user_id, None)  # フラグをクリア
             await ctx.send(f"⏰ 少し待ってください。あと{wait_time:.1f}秒後に再度お試しください。")
             return
         
@@ -1767,35 +1779,18 @@ async def team_divide(ctx, format_type=None):
     except Exception as e:
         await ctx.send(f"❌ チーム分けでエラーが発生しました: {str(e)}")
         print(f"チーム分けエラー: {e}")
-    finally:
-        # 実行中フラグをクリア
-        command_executing.pop(user_id, None)
 
 @bot.command(name='quick_team', aliases=['qt'], help='簡単チーム分け（例: !qt, !quick_team 2v1）')
+@prevent_duplicate_execution
 async def quick_team(ctx, format_type=None):
     """簡単チーム分け（エイリアス）"""
     await team_divide(ctx, format_type)
 
 @bot.command(name='vc_team', aliases=['vct'], help='VC内メンバーでチーム分けします（例: !vc_team, !vc_team 2v2）')
+@prevent_duplicate_execution
 async def vc_team_divide(ctx, format_type=None):
     """VC内メンバー専用チーム分け機能"""
     try:
-        # 実行中チェック
-        user_id = ctx.author.id
-        if (user_id in command_executing and 
-            command_executing[user_id] in ['team', 'auto_team', 'vc_team']):
-            await ctx.send("⚠️ チーム分けコマンドが既に実行中です。少しお待ちください。")
-            return
-        
-        # メッセージIDベースの重複チェック
-        message_id = ctx.message.id
-        if message_id in processed_messages:
-            print(f"重複実行防止: vc_team コマンド - メッセージID {message_id} は既に処理済み")
-            return
-        processed_messages.add(message_id)
-        
-        # 実行中フラグを設定
-        command_executing[user_id] = 'vc_team'
         
         guild = ctx.guild
         if not guild:
@@ -2267,6 +2262,7 @@ async def on_command_error(ctx, error):
         await ctx.send("予期しないエラーが発生しました。")
 
 @bot.command(name='mystats', help='メンバーの統計情報を表示します')
+@prevent_duplicate_execution
 async def show_member_stats(ctx, member: discord.Member = None):
     """メンバーの統計情報を表示"""
     try:
@@ -2363,6 +2359,7 @@ VALORANT_MAPS = {
 }
 
 @bot.command(name='map', aliases=['マップ', 'valmap'], help='VALORANTのマップをランダムに選択します')
+@prevent_duplicate_execution
 async def valorant_map_roulette(ctx, count: int = 1):
     """VALORANTマップルーレット"""
     try:
@@ -2416,6 +2413,7 @@ async def valorant_map_roulette(ctx, count: int = 1):
         await ctx.send("❌ マップルーレットでエラーが発生しました。")
 
 @bot.command(name='maplist', aliases=['マップ一覧', 'allmaps'], help='VALORANTの全マップ一覧を表示します')
+@prevent_duplicate_execution
 async def valorant_map_list(ctx):
     """VALORANTマップ一覧表示"""
     try:
@@ -2476,6 +2474,7 @@ async def valorant_map_list(ctx):
         await ctx.send("❌ マップ一覧の表示でエラーが発生しました。")
 
 @bot.command(name='mapinfo', aliases=['マップ情報'], help='特定のVALORANTマップの詳細情報を表示します')
+@prevent_duplicate_execution
 async def valorant_map_info(ctx, *, map_name=None):
     """特定マップの詳細情報表示"""
     try:
