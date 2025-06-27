@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: discord-bot-rion
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TRACKER_API_KEY
+        sync: false
+    autoDeploy: true
+    repo: https://github.com/Mishimaxx/discord-bot.git
+    branch: main 
