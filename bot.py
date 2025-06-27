@@ -10,6 +10,8 @@ import json
 import random
 import traceback
 import logging
+from aiohttp import web
+import threading
 
 # 環境変数を読み込み
 load_dotenv()
@@ -30,6 +32,64 @@ processed_messages = set()  # 処理済みメッセージIDの記録
 user_message_cache = {}  # ユーザー別の最後のメッセージ内容とタイムスタンプ
 command_executing = {}  # コマンド実行中フラグ（ユーザーID: コマンド名）
 
+# Bot統計情報
+bot_stats = {
+    'start_time': datetime.now(),
+    'commands_executed': 0,
+    'messages_processed': 0,
+    'errors_count': 0,
+    'last_error': None,
+    'last_heartbeat': datetime.now(),
+    'restart_count': 0
+}
+
+# ヘルスチェック機能
+async def health_monitor():
+    """Botの健康状態を監視し、問題があれば警告"""
+    while True:
+        try:
+            await asyncio.sleep(300)  # 5分ごとにチェック
+            current_time = datetime.now()
+            
+            # ハートビートを更新
+            bot_stats['last_heartbeat'] = current_time
+            
+            # メモリ使用量チェック
+            try:
+                import psutil
+                process = psutil.Process()
+                memory_mb = process.memory_info().rss / 1024 / 1024
+                
+                # メモリ使用量が100MBを超えたら警告
+                if memory_mb > 100:
+                    print(f"⚠️ 高メモリ使用量警告: {memory_mb:.1f}MB")
+                    cleanup_memory()  # 自動クリーンアップ
+                    
+                # エラー率チェック
+                if bot_stats['commands_executed'] > 0:
+                    error_rate = (bot_stats['errors_count'] / bot_stats['commands_executed']) * 100
+                    if error_rate > 20:  # エラー率20%以上
+                        print(f"⚠️ 高エラー率警告: {error_rate:.1f}%")
+                        
+            except ImportError:
+                pass  # psutilがない場合はスキップ
+                
+            # Discord接続状態チェック
+            if bot.is_closed():
+                print("❌ Discord接続が切断されています")
+                bot_stats['errors_count'] += 1
+                
+            # 定期的な状態報告（1時間ごと）
+            uptime = current_time - bot_stats['start_time']
+            if uptime.total_seconds() % 3600 < 300:  # 1時間±5分の範囲
+                print(f"📊 定期報告: 稼働時間 {uptime.days}日{uptime.seconds//3600}時間, "
+                      f"コマンド実行 {bot_stats['commands_executed']}, "
+                      f"エラー {bot_stats['errors_count']}")
+                      
+        except Exception as e:
+            print(f"ヘルスモニターエラー: {e}")
+            bot_stats['errors_count'] += 1
+
 # 重複実行防止デコレーター
 def prevent_duplicate_execution(func):
     """全コマンドに統一的な重複実行防止を適用するデコレーター"""
@@ -48,6 +108,13 @@ def prevent_duplicate_execution(func):
         try:
             # 元のコマンドを実行
             await func(ctx, *args, **kwargs)
+            # 成功時に統計を更新
+            bot_stats['commands_executed'] += 1
+        except Exception as e:
+            # エラー時に統計を更新
+            bot_stats['errors_count'] += 1
+            bot_stats['last_error'] = str(e)
+            raise  # 元のエラーを再発生
         finally:
             # 実行中フラグをクリア
             command_executing.pop(user_id, None)
@@ -57,6 +124,7 @@ def prevent_duplicate_execution(func):
 # 会話履歴管理
 conversation_history = {}  # チャンネルIDごとの会話履歴
 MAX_HISTORY_LENGTH = 10   # 保存する会話数の上限
+MAX_CONVERSATIONS = 50    # 保存するチャンネル数の上限
 
 # Botの設定（メンバー情報取得対応）
 intents = discord.Intents.default()
@@ -71,6 +139,79 @@ welcome_messages_dict = {}
 custom_commands_dict = {}
 moderation_settings_dict = {}
 
+# メモリクリーンアップ関数
+def cleanup_memory():
+    """メモリリークを防ぐためのクリーンアップ"""
+    global processed_messages, user_message_cache, conversation_history, user_last_request
+    
+    # 古いprocessed_messagesをクリア
+    if len(processed_messages) > 1000:
+        processed_messages.clear()
+    
+    # 古いuser_message_cacheをクリア
+    if len(user_message_cache) > 100:
+        user_message_cache.clear()
+    
+    # 会話履歴の制限
+    if len(conversation_history) > MAX_CONVERSATIONS:
+        # 最も古いチャンネルを削除
+        oldest_channels = sorted(conversation_history.keys())[:len(conversation_history) - MAX_CONVERSATIONS]
+        for channel_id in oldest_channels:
+            del conversation_history[channel_id]
+    
+    # 古いレート制限記録をクリア（24時間以上古い）
+    current_time = datetime.now()
+    old_requests = []
+    for user_id, last_time in user_last_request.items():
+        if (current_time - last_time).total_seconds() > 86400:  # 24時間
+            old_requests.append(user_id)
+    
+    for user_id in old_requests:
+        del user_last_request[user_id]
+
+async def periodic_cleanup():
+    """定期的なメモリクリーンアップ（30分ごと）"""
+    while True:
+        try:
+            await asyncio.sleep(1800)  # 30分待機
+            cleanup_memory()
+            print(f"🧹 メモリクリーンアップ実行: {datetime.now().strftime('%H:%M:%S')}")
+        except Exception as e:
+            print(f"クリーンアップエラー: {e}")
+
+async def internal_keep_alive():
+    """内部HTTPサーバーによるKeep-alive機能"""
+    while True:
+        try:
+            # 25分ごとに実行（30分のスリープタイマーより短く）
+            await asyncio.sleep(1500)  # 25分
+            
+            # 内部的にアクティビティを生成
+            current_time = datetime.now()
+            bot_stats['last_heartbeat'] = current_time
+            
+            print(f"💓 内部Keep-alive実行: {current_time.strftime('%H:%M:%S')}")
+            print(f"📊 稼働状況: コマンド {bot_stats['commands_executed']}, メッセージ {bot_stats['messages_processed']}")
+            
+            # メモリ使用量チェック
+            try:
+                import psutil
+                process = psutil.Process()
+                memory_mb = process.memory_info().rss / 1024 / 1024
+                print(f"💾 メモリ使用量: {memory_mb:.1f}MB")
+                
+                if memory_mb > 80:  # 80MB以上で警告
+                    print("⚠️ メモリ使用量が高めです。クリーンアップを実行...")
+                    cleanup_memory()
+                    
+            except ImportError:
+                print("📊 基本的なKeep-alive実行")
+                    
+        except Exception as e:
+            print(f"⚠️ Internal Keep-alive error: {e}")
+            # エラーが発生しても継続
+
+# 定期的なクリーンアップタスク
 @bot.event
 async def on_ready():
     print(f'{bot.user}としてログインしました！')
@@ -86,6 +227,20 @@ async def on_ready():
         human_members = [m for m in guild.members if not m.bot]
         print(f'    人間メンバー数: {len(human_members)}人')
     print('------')
+    
+    # HTTPサーバーを起動（Render.com Web Service対応）
+    web_runner = await start_web_server()
+    
+    # バックグラウンドタスクを開始
+    bot.loop.create_task(periodic_cleanup())  # メモリクリーンアップ
+    bot.loop.create_task(health_monitor())    # ヘルスモニター
+    
+    # 内部Keep-alive機能（HTTPサーバーが動作している場合）
+    if web_runner:
+        print("🔄 内部Keep-alive機能を開始")
+        bot.loop.create_task(internal_keep_alive())
+    
+    print("🚀 Discord Bot + Webサーバーが開始されました！")
 
 @bot.event
 async def on_member_join(member):
@@ -134,6 +289,9 @@ async def on_message(message):
             return
     
     user_message_cache[user_id] = (message.content, current_time)
+    
+    # メッセージ処理統計を更新
+    bot_stats['messages_processed'] += 1
     
     # 古いキャッシュを削除（メモリリーク防止）
     if len(processed_messages) > 1000:
@@ -359,6 +517,24 @@ async def show_commands(ctx):
     
     embed = discord.Embed(title="🤖 リオンのコマンド一覧", color=0x00ff00)
     
+    # 基本コマンド
+    basic_commands = [
+        "!hello - 挨拶メッセージ",
+        "!ping - 応答速度確認",
+        "!info - サーバー情報",
+        "!members - メンバー統計",
+        "!channels - チャンネル情報",
+        "!userinfo [@ユーザー] - ユーザー情報",
+        "!mystats [@ユーザー] - メンバー統計情報",
+        "!dice [面数] - サイコロを振る"
+    ]
+    
+    embed.add_field(
+        name="📝 基本コマンド",
+        value="\n".join(basic_commands),
+        inline=False
+    )
+    
     # チーム分けコマンド
     team_commands = [
         "!team - 自動チーム分け",
@@ -366,6 +542,8 @@ async def show_commands(ctx):
         "!team 3v3 - 3対3のチーム分け",
         "!team 2v2 - 2対2のチーム分け",
         "!team 1v1 - 1対1のチーム分け",
+        "!team 4v4 - 4対4のチーム分け",
+        "!team 5v5 - 5対5のチーム分け",
         "!qt [形式] - クイックチーム分け",
         "!vc_team [形式] - VC内メンバーでチーム分け",
         "!vct [形式] - VC専用チーム分け（短縮版）"
@@ -377,33 +555,49 @@ async def show_commands(ctx):
         inline=False
     )
     
-    # 基本コマンド
-    basic_commands = [
-        "!ping - 応答速度確認",
-        "!info - サーバー情報",
-        "!members - メンバー統計",
-        "!channels - チャンネル情報",
-        "!commands - このコマンド一覧"
-    ]
-    
-    embed.add_field(
-        name="📝 基本コマンド",
-        value="\n".join(basic_commands),
-        inline=False
-    )
-    
     # AIコマンド
     ai_commands = [
         "!ai [質問] - AI会話",
         "!expert [質問] - 専門的な回答",
         "!creative [プロンプト] - 創作的な回答",
         "!translate [テキスト] - 翻訳",
-        "!summarize [テキスト] - 要約"
+        "!summarize [テキスト] - 要約",
+        "!history - 会話履歴表示",
+        "!clear_history - 会話履歴クリア",
+        "!usage - AI使用量と制限情報"
     ]
     
     embed.add_field(
         name="🧠 AIコマンド",
         value="\n".join(ai_commands),
+        inline=False
+    )
+    
+    # VALORANTコマンド
+    valorant_commands = [
+        "!valorant [RiotID#Tag] - VALORANT統計表示",
+        "!valorant_match [RiotID#Tag] - 試合履歴",
+        "!map [数] - マップルーレット",
+        "!maplist - 全マップ一覧",
+        "!mapinfo [マップ名] - マップ詳細情報"
+    ]
+    
+    embed.add_field(
+        name="🎮 VALORANTコマンド",
+        value="\n".join(valorant_commands),
+        inline=False
+    )
+    
+    # Bot管理コマンド
+    admin_commands = [
+        "!botstatus - Bot状態とパフォーマンス確認",
+        "!cleanup - メモリクリーンアップ（管理者）",
+        "!restart - Bot再起動（管理者）"
+    ]
+    
+    embed.add_field(
+        name="⚙️ Bot管理コマンド",
+        value="\n".join(admin_commands),
         inline=False
     )
     
@@ -416,7 +610,7 @@ async def show_commands(ctx):
     
     # 現在登録されているコマンド数を表示
     command_count = len(bot.commands)
-    embed.set_footer(text=f"登録済みコマンド数: {command_count}個")
+    embed.set_footer(text=f"登録済みコマンド数: {command_count}個 | 詳細: !help")
     
     await ctx.send(embed=embed)
 
@@ -1046,6 +1240,186 @@ async def show_usage(ctx):
     
     await ctx.send(embed=embed)
 
+@bot.command(name='botstatus', help='Botの状態とパフォーマンスを表示します')
+@prevent_duplicate_execution
+async def bot_status(ctx):
+    """Botの状態を表示"""
+    try:
+        current_time = datetime.now()
+        uptime = current_time - bot_stats['start_time']
+        
+        # メモリ使用量を取得
+        process = psutil.Process()
+        memory_usage = process.memory_info().rss / 1024 / 1024  # MB
+        cpu_usage = process.cpu_percent()
+        
+        embed = discord.Embed(
+            title="🤖 Bot ステータス",
+            color=discord.Color.green() if bot_stats['errors_count'] < 10 else discord.Color.orange(),
+            timestamp=current_time
+        )
+        
+        # 稼働時間
+        embed.add_field(
+            name="⏰ 稼働時間",
+            value=f"{uptime.days}日 {uptime.seconds//3600}時間 {(uptime.seconds%3600)//60}分",
+            inline=True
+        )
+        
+        # パフォーマンス
+        embed.add_field(
+            name="💾 メモリ使用量",
+            value=f"{memory_usage:.1f} MB",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🖥️ CPU使用率",
+            value=f"{cpu_usage:.1f}%",
+            inline=True
+        )
+        
+        # 統計情報
+        embed.add_field(
+            name="📊 処理統計",
+            value=f"実行コマンド: {bot_stats['commands_executed']:,}回\n"
+                  f"処理メッセージ: {bot_stats['messages_processed']:,}件\n"
+                  f"エラー回数: {bot_stats['errors_count']:,}回",
+            inline=False
+        )
+        
+        # 接続情報
+        embed.add_field(
+            name="🌐 接続情報",
+            value=f"レイテンシ: {round(bot.latency * 1000)}ms\n"
+                  f"サーバー数: {len(bot.guilds)}\n"
+                  f"総ユーザー数: {len(bot.users):,}人",
+            inline=False
+        )
+        
+        # 最新エラー（あれば）
+        if bot_stats['last_error']:
+            embed.add_field(
+                name="⚠️ 最新エラー",
+                value=f"```{bot_stats['last_error'][:100]}...```",
+                inline=False
+            )
+        
+        # キャッシュ状況
+        embed.add_field(
+            name="🗄️ キャッシュ状況",
+            value=f"処理済みメッセージ: {len(processed_messages)}\n"
+                  f"ユーザーキャッシュ: {len(user_message_cache)}\n"
+                  f"会話履歴: {len(conversation_history)}チャンネル\n"
+                  f"実行中コマンド: {len(command_executing)}",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"起動時刻: {bot_stats['start_time'].strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        await ctx.send(embed=embed)
+        
+    except ImportError:
+        # psutil がない場合の簡易版
+        uptime = datetime.now() - bot_stats['start_time']
+        
+        embed = discord.Embed(
+            title="🤖 Bot ステータス（簡易版）",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        
+        embed.add_field(
+            name="⏰ 稼働時間",
+            value=f"{uptime.days}日 {uptime.seconds//3600}時間 {(uptime.seconds%3600)//60}分",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 処理統計",
+            value=f"実行コマンド: {bot_stats['commands_executed']:,}回\n"
+                  f"エラー回数: {bot_stats['errors_count']:,}回",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🌐 接続情報",
+            value=f"レイテンシ: {round(bot.latency * 1000)}ms\n"
+                  f"サーバー数: {len(bot.guilds)}",
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ ステータス取得エラー: {str(e)}")
+
+@bot.command(name='cleanup', help='手動でメモリクリーンアップを実行します（管理者用）')
+@prevent_duplicate_execution
+async def manual_cleanup(ctx):
+    """手動メモリクリーンアップ"""
+    # 管理者権限チェック
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ このコマンドは管理者のみ使用できます。")
+        return
+    
+    try:
+        # クリーンアップ前の状態
+        before_processed = len(processed_messages)
+        before_cache = len(user_message_cache)
+        before_history = len(conversation_history)
+        
+        cleanup_memory()
+        
+        # クリーンアップ後の状態
+        after_processed = len(processed_messages)
+        after_cache = len(user_message_cache)
+        after_history = len(conversation_history)
+        
+        embed = discord.Embed(
+            title="🧹 メモリクリーンアップ完了",
+            color=discord.Color.green()
+        )
+        
+        embed.add_field(
+            name="📊 クリーンアップ結果",
+            value=f"処理済みメッセージ: {before_processed} → {after_processed}\n"
+                  f"ユーザーキャッシュ: {before_cache} → {after_cache}\n"
+                  f"会話履歴: {before_history} → {after_history}",
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ クリーンアップエラー: {str(e)}")
+
+@bot.command(name='restart', help='Botを再起動します（管理者用）')
+@prevent_duplicate_execution
+async def restart_bot(ctx):
+    """Bot再起動コマンド（管理者用）"""
+    # 管理者権限チェック
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ このコマンドは管理者のみ使用できます。")
+        return
+    
+    try:
+        await ctx.send("🔄 Botを再起動しています...")
+        
+        # 統計情報を更新
+        bot_stats['restart_count'] += 1
+        
+        # ログ出力
+        print(f"🔄 管理者 {ctx.author} によりBot再起動が要求されました")
+        print(f"📊 再起動回数: {bot_stats['restart_count']}")
+        
+        # 安全な再起動処理
+        await bot.close()
+        
+    except Exception as e:
+        await ctx.send(f"❌ 再起動エラー: {str(e)}")
+        print(f"再起動エラー: {e}")
+
 # VALORANT統計機能
 async def get_valorant_stats(riot_id, tag):
     """VALORANT統計を取得"""
@@ -1060,15 +1434,24 @@ async def get_valorant_stats(riot_id, tag):
     url = f"{TRACKER_BASE_URL}/standard/profile/riot/{riot_id}%23{tag}"
     
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=10)  # 10秒のタイムアウト
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
                     return data, None
                 elif response.status == 404:
                     return None, "プレイヤーが見つかりません。Riot ID#Tagを確認してください。"
+                elif response.status == 429:
+                    return None, "API制限に達しています。しばらく待ってから再試行してください。"
+                elif response.status == 403:
+                    return None, "API認証エラー: API Keyを確認してください。"
                 else:
                     return None, f"API エラー: {response.status}"
+    except asyncio.TimeoutError:
+        return None, "タイムアウト: サーバーへの接続がタイムアウトしました。"
+    except aiohttp.ClientConnectorError:
+        return None, "接続エラー: インターネット接続を確認してください。"
     except Exception as e:
         return None, f"接続エラー: {str(e)}"
 
@@ -1266,7 +1649,8 @@ async def valorant_matches(ctx, *, riot_id=None):
             # プレイヤーIDを取得
             search_url = f"{TRACKER_BASE_URL}/profile/riot/{name}/{tag}"
             
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=15)  # 15秒のタイムアウト
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(search_url, headers=headers) as response:
                     if response.status != 200:
                         await ctx.send(f"❌ プレイヤー '{riot_id}' が見つかりませんでした。")
@@ -2246,7 +2630,17 @@ async def vc_team_divide(ctx, format_type=None):
         print(f"VC チーム分けエラー: {e}")
     finally:
         # 実行中フラグをクリア
-        command_executing.pop(user_id, None)
+        command_executing.pop(ctx.author.id, None)
+
+@bot.event
+async def on_disconnect():
+    """Discord接続が切れた時の処理"""
+    print(f"⚠️ Discord接続が切断されました: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+@bot.event
+async def on_resumed():
+    """Discord接続が復旧した時の処理"""
+    print(f"✅ Discord接続が復旧しました: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -2257,9 +2651,19 @@ async def on_command_error(ctx, error):
         await ctx.send(f"必要な引数が不足しています。`!help {ctx.command}`で使い方を確認してください。")
     elif isinstance(error, commands.BadArgument):
         await ctx.send("引数の形式が正しくありません。")
+    elif isinstance(error, discord.HTTPException):
+        print(f"Discord HTTPエラー: {error}")
+        await ctx.send("Discord APIエラーが発生しました。少し待ってから再試行してください。")
+    elif isinstance(error, discord.ConnectionClosed):
+        print(f"Discord接続エラー: {error}")
     else:
-        print(f"エラーが発生しました: {error}")
-        await ctx.send("予期しないエラーが発生しました。")
+        print(f"予期しないエラー: {error}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await ctx.send("予期しないエラーが発生しました。管理者に報告してください。")
+        except:
+            print("エラーメッセージの送信も失敗しました")
 
 @bot.command(name='mystats', help='メンバーの統計情報を表示します')
 @prevent_duplicate_execution
@@ -2505,21 +2909,115 @@ async def valorant_map_info(ctx, *, map_name=None):
         print(f"マップ情報エラー: {e}")
         await ctx.send("❌ マップ情報の表示でエラーが発生しました。")
 
+# Render.com Web Service対応のHTTPサーバー
+async def handle_health(request):
+    """ヘルスチェックエンドポイント"""
+    uptime = datetime.now() - bot_stats['start_time']
+    health_info = {
+        "status": "healthy",
+        "uptime_seconds": int(uptime.total_seconds()),
+        "bot_ready": not bot.is_closed(),
+        "commands_executed": bot_stats['commands_executed'],
+        "messages_processed": bot_stats['messages_processed'],
+        "errors_count": bot_stats['errors_count'],
+        "last_heartbeat": bot_stats['last_heartbeat'].isoformat()
+    }
+    return web.json_response(health_info)
+
+async def handle_root(request):
+    """ルートエンドポイント"""
+    return web.Response(text="Discord Bot is running! 🤖", content_type="text/plain")
+
+async def handle_ping(request):
+    """Pingエンドポイント"""
+    return web.json_response({"message": "pong", "timestamp": datetime.now().isoformat()})
+
+def create_app():
+    """aiohttp Webアプリケーションを作成"""
+    app = web.Application()
+    app.router.add_get('/', handle_root)
+    app.router.add_get('/health', handle_health)
+    app.router.add_get('/ping', handle_ping)
+    return app
+
+async def start_web_server():
+    """Webサーバーを起動"""
+    try:
+        app = create_app()
+        port = int(os.environ.get('PORT', 8080))  # Render.comのポート
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        
+        print(f"🌐 HTTPサーバーが起動しました: ポート {port}")
+        print(f"📡 ヘルスチェック: http://localhost:{port}/health")
+        
+        return runner
+    except Exception as e:
+        print(f"❌ Webサーバー起動エラー: {e}")
+        return None
+
 # Botを起動
 if __name__ == "__main__":
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    
+    # ログレベルを調整（DEBUGは冗長すぎるため）
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # discord.py のログレベルを調整
+    discord_logger = logging.getLogger('discord')
+    discord_logger.setLevel(logging.WARNING)  # WARNINGレベル以上のみ
     
     token = os.getenv('DISCORD_TOKEN')
     if not token:
         print("エラー: DISCORD_TOKENが設定されていません。")
         print(".envファイルを作成し、ボットトークンを設定してください。")
     else:
-        try:
-            bot.run(token)
-        except discord.LoginFailure:
-            print("エラー: 無効なボットトークンです。")
-        except Exception as e:
-            import traceback
-            print(f"エラーが発生しました: {e}")
-            traceback.print_exc() 
+        max_retries = 5
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                print(f"🚀 Botを起動中... (試行 {retry_count + 1}/{max_retries})")
+                bot.run(token, reconnect=True)
+                break  # 正常終了した場合
+                
+            except discord.LoginFailure:
+                print("❌ エラー: 無効なボットトークンです。")
+                break  # 再試行しても無意味
+                
+            except discord.HTTPException as e:
+                print(f"⚠️ Discord HTTPエラー: {e}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = min(2 ** retry_count, 60)  # 指数バックオフ（最大60秒）
+                    print(f"⏰ {wait_time}秒後に再試行します...")
+                    import time
+                    time.sleep(wait_time)
+                
+            except KeyboardInterrupt:
+                print("🛑 Botを手動で停止しました。")
+                break
+                
+            except Exception as e:
+                print(f"❌ 予期しないエラー: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = min(2 ** retry_count, 60)
+                    print(f"⏰ {wait_time}秒後に再試行します...")
+                    import time
+                    time.sleep(wait_time)
+        
+        if retry_count >= max_retries:
+            print(f"❌ {max_retries}回の再試行後も起動に失敗しました。")
+        
+        print("👋 Botが終了しました。") 

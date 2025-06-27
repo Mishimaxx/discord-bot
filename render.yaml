@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: discord-bot-rion
+    name: discord-bot
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
@@ -11,6 +11,13 @@ services:
         sync: false
       - key: TRACKER_API_KEY
         sync: false
+      - key: PORT
+        value: 8080
     autoDeploy: true
     repo: https://github.com/Mishimaxx/discord-bot.git
-    branch: main 
+    branch: main
+    plan: free
+    region: oregon
+    scaling:
+      minInstances: 1
+      maxInstances: 1 
