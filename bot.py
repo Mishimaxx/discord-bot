@@ -2423,16 +2423,12 @@ async def valorant_map_list(ctx):
             map_text = f"{map_info['emoji']} **{map_key}** ({map_info['name']}) - {map_info['sites']}"
             map_list.append(map_text)
         
-        # マップを3つずつに分けて表示（見やすくするため）
-        chunk_size = 4
-        for i in range(0, len(map_list), chunk_size):
-            chunk = map_list[i:i+chunk_size]
-            field_name = f"🗺️ マップ {i//chunk_size + 1}" if len(map_list) > chunk_size else "🗺️ 全マップ"
-            embed.add_field(
-                name=field_name,
-                value="\n".join(chunk),
-                inline=False
-            )
+        # 全マップを一つのフィールドにまとめて表示
+        embed.add_field(
+            name="🗺️ 全マップ",
+            value="\n".join(map_list),
+            inline=False
+        )
         
         embed.add_field(
             name="🎲 使用方法",
