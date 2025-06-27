@@ -204,8 +204,8 @@ async def on_message(message):
         await handle_team_request(message)
         return
     
-    # その他のメッセージ処理
-    await bot.process_commands(message)
+    # その他のメッセージ処理（コマンドは既に133行目で処理済み）
+    # 通常のメッセージのみ（コマンド以外）なので、bot.process_commands()は不要
 
 async def handle_team_request(message):
     """チーム分けリクエストの自動処理"""
