@@ -197,7 +197,10 @@ async def on_message(message):
     
     # チーム分けリクエストを検出（コマンドでない場合のみ）
     team_keywords = ['チーム分けし', 'チーム分け', 'チーム作', 'チームわ', 'team分', 'team作', 'チーム分けて', 'チーム決めて', 'チーム決め']
-    if any(keyword in message.content for keyword in team_keywords) and len(message.content) > 3:
+    # コマンドでない場合のみ自然言語検出を実行
+    if (any(keyword in message.content for keyword in team_keywords) and 
+        len(message.content) > 3 and 
+        not message.content.startswith('!')):
         await handle_team_request(message)
         return
     
@@ -1302,23 +1305,32 @@ async def valorant_matches(ctx, *, riot_id=None):
 async def team_divide(ctx, format_type=None):
     """チーム分け機能"""
     try:
-        # 実行中チェック
-        if ctx.author.id in command_executing and command_executing[ctx.author.id] == 'team':
+        # 実行中チェック（auto_teamとteamの両方をチェック）
+        user_id = ctx.author.id
+        if (user_id in command_executing and 
+            command_executing[user_id] in ['team', 'auto_team']):
             await ctx.send("⚠️ チーム分けコマンドが既に実行中です。少しお待ちください。")
             return
         
+        # メッセージIDベースの重複チェック
+        message_id = ctx.message.id
+        if message_id in processed_messages:
+            print(f"重複実行防止: team コマンド - メッセージID {message_id} は既に処理済み")
+            return
+        processed_messages.add(message_id)
+        
         # 実行中フラグを設定
-        command_executing[ctx.author.id] = 'team'
+        command_executing[user_id] = 'team'
         
         # レート制限チェック
-        allowed, wait_time = check_rate_limit(ctx.author.id)
+        allowed, wait_time = check_rate_limit(user_id)
         if not allowed:
-            command_executing.pop(ctx.author.id, None)  # フラグをクリア
+            command_executing.pop(user_id, None)  # フラグをクリア
             await ctx.send(f"⏰ 少し待ってください。あと{wait_time:.1f}秒後に再度お試しください。")
             return
         
         # リクエスト時刻を記録
-        user_last_request[ctx.author.id] = datetime.now()
+        user_last_request[user_id] = datetime.now()
         
         # サーバーの人間メンバーを取得（Bot除く）
         guild = ctx.guild
@@ -1739,9 +1751,10 @@ async def team_divide(ctx, format_type=None):
         
     except Exception as e:
         await ctx.send(f"❌ チーム分けでエラーが発生しました: {str(e)}")
+        print(f"チーム分けエラー: {e}")
     finally:
         # 実行中フラグをクリア
-        command_executing.pop(ctx.author.id, None)
+        command_executing.pop(user_id, None)
 
 @bot.command(name='quick_team', aliases=['qt'], help='簡単チーム分け（例: !qt, !quick_team 2v1）')
 async def quick_team(ctx, format_type=None):
@@ -1752,6 +1765,23 @@ async def quick_team(ctx, format_type=None):
 async def vc_team_divide(ctx, format_type=None):
     """VC内メンバー専用チーム分け機能"""
     try:
+        # 実行中チェック
+        user_id = ctx.author.id
+        if (user_id in command_executing and 
+            command_executing[user_id] in ['team', 'auto_team', 'vc_team']):
+            await ctx.send("⚠️ チーム分けコマンドが既に実行中です。少しお待ちください。")
+            return
+        
+        # メッセージIDベースの重複チェック
+        message_id = ctx.message.id
+        if message_id in processed_messages:
+            print(f"重複実行防止: vc_team コマンド - メッセージID {message_id} は既に処理済み")
+            return
+        processed_messages.add(message_id)
+        
+        # 実行中フラグを設定
+        command_executing[user_id] = 'vc_team'
+        
         guild = ctx.guild
         if not guild:
             await ctx.send("❌ このコマンドはサーバー内でのみ使用できます。")
@@ -2204,6 +2234,9 @@ async def vc_team_divide(ctx, format_type=None):
     except Exception as e:
         await ctx.send(f"❌ VC チーム分けでエラーが発生しました: {str(e)}")
         print(f"VC チーム分けエラー: {e}")
+    finally:
+        # 実行中フラグをクリア
+        command_executing.pop(user_id, None)
 
 @bot.event
 async def on_command_error(ctx, error):
