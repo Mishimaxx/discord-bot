@@ -2663,7 +2663,11 @@ async def on_command_error(ctx, error):
         import traceback
         traceback.print_exc()
         try:
-            await ctx.send("予期しないエラーが発生しました。管理者に報告してください。")
+            # 詳細なエラー情報を表示
+            error_msg = f"❌ エラーが発生しました:\n```\n{str(error)}\n```\nコマンド: `{ctx.message.content}`"
+            if len(error_msg) > 2000:
+                error_msg = f"❌ エラーが発生しました: {str(error)[:1900]}..."
+            await ctx.send(error_msg)
         except:
             print("エラーメッセージの送信も失敗しました")
 
@@ -2945,12 +2949,14 @@ user_ranks = {}  # {user_id: {"current": "rank", "peak": "rank", "updated": date
 
 def parse_rank_input(rank_input):
     """ランク入力をパース"""
+    print(f"🔍 parse_rank_input called with: '{rank_input}'")
     rank_input = rank_input.strip()
     
     # 前処理：スペース削除、全角数字を半角に変換
     rank_input = rank_input.replace(" ", "").replace("　", "")  # 半角・全角スペース削除
     rank_input = rank_input.replace("１", "1").replace("２", "2").replace("３", "3")  # 全角数字変換
     rank_input = rank_input.replace("ダイヤモンド", "ダイヤ")  # 「ダイヤモンド」→「ダイヤ」変換
+    print(f"🔍 After preprocessing: '{rank_input}'")
     
     # 完全一致チェック
     for rank_key in VALORANT_RANKS.keys():
@@ -2993,13 +2999,19 @@ def parse_rank_input(rank_input):
                 # 数字を抽出
                 for i in range(3, 0, -1):
                     if str(i) in rank_input:
-                        return ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
+                        result = ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
+                        print(f"🔍 Found rank: '{result}' for input '{rank_input}'")
+                        return result
                 # 数字がない場合は最高ランク（3）
-                return ranks[0]
+                result = ranks[0]
+                print(f"🔍 Default to highest rank: '{result}' for input '{rank_input}'")
+                return result
         else:
             if rank_input.lower().startswith(base_name.lower()):
+                print(f"🔍 Found single rank: '{ranks}' for input '{rank_input}'")
                 return ranks
     
+    print(f"🔍 No rank found for input: '{rank_input}'")
     return None
 
 @bot.command(name='rank', help='VALORANTランクを管理します（例: !rank set current ダイヤ2, !rank show）')
@@ -3007,6 +3019,9 @@ def parse_rank_input(rank_input):
 async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
     """VALORANTランクシステム"""
     try:
+        print(f"🔍 Rank command called: action={action}, rank_type={rank_type}, rank_input={rank_input}")
+        print(f"🔍 VALORANT_RANKS defined: {len(VALORANT_RANKS)} ranks")
+        print(f"🔍 user_ranks defined: {len(user_ranks)} users")
         if not action:
             # ヘルプ表示
             embed = discord.Embed(
@@ -3047,14 +3062,20 @@ async def rank_system(ctx, action=None, rank_type=None, *, rank_input=None):
                 return
             
             # ランクをパース
+            print(f"🔍 About to parse rank input: '{rank_input}'")
             parsed_rank = parse_rank_input(rank_input)
+            print(f"🔍 Parsed rank result: '{parsed_rank}'")
+            
             if not parsed_rank:
                 rank_list = ", ".join(list(VALORANT_RANKS.keys())[:10]) + "..."
                 await ctx.send(f"❌ 無効なランクです。利用可能なランク: {rank_list}")
                 return
             
             user_id = ctx.author.id
+            print(f"🔍 User ID: {user_id}")
+            
             if user_id not in user_ranks:
+                print(f"🔍 Creating new user_ranks entry for {user_id}")
                 user_ranks[user_id] = {"current": None, "peak": None, "updated": datetime.now()}
             
             # ランクタイプを統一
