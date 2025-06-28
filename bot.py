@@ -322,6 +322,15 @@ async def on_message(message):
         # ボットのメンションを削除
         content = content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
         
+        # 特定のフレーズに対する特別な応答
+        ai_keywords = ['AIか本物', 'aiか本物', 'エーアイか本物', 'お前はAI', 'お前はai', 'お前はエーアイ', '君はAI', '君はai', 'あなたはAI', 'あなたはai']
+        rion_keywords = ['りおん', 'リオン', 'rion', 'Rion', 'RION']
+        
+        # AIかりおんかを問われた場合の特別応答
+        if any(ai_keyword in content for ai_keyword in ai_keywords) and any(rion_keyword in content for rion_keyword in rion_keywords):
+            await message.reply("俺が本物のりおんやで")
+            return
+        
         # 空のメッセージの場合はデフォルト応答
         if not content:
             content = "こんにちは！何かお手伝いできることはありますか？"
