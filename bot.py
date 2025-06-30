@@ -3801,6 +3801,353 @@ rank_recruit_reminders = {}  # {recruit_id: reminder_task}
 active_tournaments = {}  # {guild_id: tournament_data}
 tournament_matches = {}  # {tournament_id: [match_data]}
 
+class TournamentView(discord.ui.View):
+    """トーナメント用UIボタン"""
+    
+    def __init__(self, timeout=3600):  # 1時間でタイムアウト
+        super().__init__(timeout=timeout)
+    
+    async def on_timeout(self):
+        """タイムアウト時の処理"""
+        try:
+            # 全てのボタンを無効化
+            for item in self.children:
+                item.disabled = True
+            
+            # トーナメントが残っている場合はEmbed更新を試行
+            for guild_id, tournament in list(active_tournaments.items()):
+                if tournament.get('status') == 'registration':
+                    try:
+                        # トーナメントメッセージの更新を試行
+                        embed = await create_tournament_embed(tournament, None)
+                        embed.add_field(
+                            name="⏰ タイムアウト", 
+                            value="ボタンの有効期限が切れました。コマンドで操作してください。", 
+                            inline=False
+                        )
+                        # メッセージ更新は context がないため、ログに記録のみ
+                        print(f"TournamentView タイムアウト: guild_id={guild_id}")
+                    except Exception as e:
+                        print(f"TournamentView タイムアウト時のEmbed更新エラー: {e}")
+        except Exception as e:
+            print(f"TournamentView タイムアウト処理エラー: {e}")
+            
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """エラーハンドリング"""
+        print(f"TournamentView エラー: {error}")
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 操作中にエラーが発生しました。しばらく待ってから再試行してください。", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ 操作中にエラーが発生しました。しばらく待ってから再試行してください。", ephemeral=True)
+        except:
+            pass  # エラー通知に失敗しても継続
+        
+    @discord.ui.button(label='参加', emoji='✅', style=discord.ButtonStyle.success)
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """参加ボタン"""
+        await interaction.response.defer()
+        
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        
+        if guild_id not in active_tournaments:
+            await interaction.followup.send("❌ アクティブなトーナメントがありません。", ephemeral=True)
+            return
+        
+        tournament = active_tournaments[guild_id]
+        
+        if tournament['status'] != 'registration':
+            await interaction.followup.send("❌ 現在参加登録を受け付けていません。", ephemeral=True)
+            return
+        
+        if user_id in [p['user_id'] for p in tournament['participants']]:
+            await interaction.followup.send("⚠️ 既に参加登録済みです。", ephemeral=True)
+            return
+        
+        if len(tournament['participants']) >= tournament['max_participants']:
+            await interaction.followup.send("❌ 参加者が満員です。", ephemeral=True)
+            return
+        
+        # 参加登録
+        participant = {
+            'user_id': user_id,
+            'user': interaction.user,
+            'joined_at': datetime.now(),
+            'wins': 0,
+            'losses': 0
+        }
+        
+        tournament['participants'].append(participant)
+        
+        current_count = len(tournament['participants'])
+        
+        # トーナメントメッセージを更新
+        embed = await create_tournament_embed(tournament, interaction.guild)
+        await interaction.edit_original_response(embed=embed, view=self)
+        
+        await interaction.followup.send(f"✅ {interaction.user.display_name} がトーナメントに参加しました！ ({current_count}/{tournament['max_participants']})", ephemeral=False)
+    
+    @discord.ui.button(label='離脱', emoji='❌', style=discord.ButtonStyle.danger)
+    async def leave_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """離脱ボタン"""
+        await interaction.response.defer()
+        
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        
+        if guild_id not in active_tournaments:
+            await interaction.followup.send("❌ アクティブなトーナメントがありません。", ephemeral=True)
+            return
+        
+        tournament = active_tournaments[guild_id]
+        
+        if tournament['status'] != 'registration':
+            await interaction.followup.send("❌ 既に開始されているため離脱できません。", ephemeral=True)
+            return
+        
+        # 参加者から削除
+        for i, participant in enumerate(tournament['participants']):
+            if participant['user_id'] == user_id:
+                del tournament['participants'][i]
+                
+                # トーナメントメッセージを更新
+                embed = await create_tournament_embed(tournament, interaction.guild)
+                await interaction.edit_original_response(embed=embed, view=self)
+                
+                await interaction.followup.send(f"✅ {interaction.user.display_name} がトーナメントから離脱しました。", ephemeral=False)
+                return
+        
+        await interaction.followup.send("❌ トーナメントに参加していません。", ephemeral=True)
+    
+    @discord.ui.button(label='ステータス確認', emoji='📊', style=discord.ButtonStyle.secondary)
+    async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """ステータス確認ボタン"""
+        await interaction.response.defer()
+        
+        guild_id = interaction.guild.id
+        
+        if guild_id not in active_tournaments:
+            await interaction.followup.send("❌ アクティブなトーナメントがありません。", ephemeral=True)
+            return
+        
+        tournament = active_tournaments[guild_id]
+        
+        status_map = {
+            'registration': '📝 参加者募集中',
+            'ongoing': '⚔️ 進行中',
+            'ended': '🏁 終了'
+        }
+        
+        embed = discord.Embed(
+            title="📊 トーナメント詳細ステータス",
+            color=0x00aaff
+        )
+        
+        embed.add_field(
+            name="基本情報",
+            value=f"**ステータス:** {status_map.get(tournament['status'], tournament['status'])}\n"
+                  f"**形式:** {tournament['tournament_type']}\n"
+                  f"**参加者:** {len(tournament['participants'])}/{tournament['max_participants']}人\n"
+                  f"**作成者:** {tournament['creator'].display_name}",
+            inline=True
+        )
+        
+        # 参加者リスト
+        if tournament['participants']:
+            participants_list = []
+            for i, participant in enumerate(tournament['participants'], 1):
+                participants_list.append(f"{i}. {participant['user'].display_name}")
+            
+            embed.add_field(
+                name="👥 参加者一覧",
+                value="\n".join(participants_list[:10]) + ("..." if len(participants_list) > 10 else ""),
+                inline=True
+            )
+        
+        if tournament['status'] == 'ongoing':
+            current_round_matches = [m for m in tournament['bracket'] if m['round'] == tournament['current_round']]
+            pending_matches = [m for m in current_round_matches if m['status'] == 'pending']
+            
+            embed.add_field(
+                name="進行状況",
+                value=f"**現在ラウンド:** {tournament['current_round']}\n"
+                      f"**待機中試合:** {len(pending_matches)}試合\n"
+                      f"**完了試合:** {len([m for m in tournament['bracket'] if m['status'] == 'completed'])}試合",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"ID: {tournament['id'][:8]} | 作成: {tournament['created_at'].strftime('%m/%d %H:%M')}")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label='開始', emoji='🏁', style=discord.ButtonStyle.primary)
+    async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """開始ボタン（作成者のみ）"""
+        await interaction.response.defer()
+        
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        
+        if guild_id not in active_tournaments:
+            await interaction.followup.send("❌ アクティブなトーナメントがありません。", ephemeral=True)
+            return
+        
+        tournament = active_tournaments[guild_id]
+        
+        # 権限チェック
+        if user_id != tournament['creator'].id and not interaction.user.guild_permissions.manage_messages:
+            await interaction.followup.send("❌ トーナメント作成者または管理者のみ開始できます。", ephemeral=True)
+            return
+        
+        if tournament['status'] != 'registration':
+            await interaction.followup.send("❌ 既に開始されているか、終了しています。", ephemeral=True)
+            return
+        
+        participants = tournament['participants']
+        
+        if len(participants) < 4:
+            await interaction.followup.send("❌ トーナメント開始には最低4人必要です。", ephemeral=True)
+            return
+        
+        # ブラケット生成処理（start_tournament関数と同じロジック）
+        import math
+        
+        # 2の累乗に調整
+        bracket_size = 2 ** math.ceil(math.log2(len(participants)))
+        
+        # 参加者をシャッフル
+        shuffled_participants = participants.copy()
+        random.shuffle(shuffled_participants)
+        
+        # 不戦勝者（BYE）を追加
+        while len(shuffled_participants) < bracket_size:
+            shuffled_participants.append(None)  # BYE
+        
+        # 第1ラウンドの試合を作成
+        matches = []
+        match_id = 1
+        
+        for i in range(0, len(shuffled_participants), 2):
+            player1 = shuffled_participants[i]
+            player2 = shuffled_participants[i + 1] if i + 1 < len(shuffled_participants) else None
+            
+            match_data = {
+                'id': match_id,
+                'round': 1,
+                'player1': player1,
+                'player2': player2,
+                'winner': None,
+                'status': 'pending'  # pending, completed
+            }
+            
+            # BYE の処理
+            if player1 and not player2:
+                match_data['winner'] = player1
+                match_data['status'] = 'completed'
+            elif player2 and not player1:
+                match_data['winner'] = player2
+                match_data['status'] = 'completed'
+            
+            matches.append(match_data)
+            match_id += 1
+        
+        tournament['bracket'] = matches
+        tournament['status'] = 'ongoing'
+        tournament['current_round'] = 1
+        
+        embed = discord.Embed(
+            title="🏁 トーナメント開始！",
+            description=f"**{tournament['tournament_type']}** トーナメントが開始されました",
+            color=0xffd700
+        )
+        
+        embed.add_field(
+            name="📊 情報",
+            value=f"**参加者数:** {len([p for p in participants if p])}人\n"
+                  f"**第1ラウンド試合数:** {len([m for m in matches if m['status'] == 'pending'])}試合\n"
+                  f"**形式:** シングルエリミネーション",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🎯 次のステップ",
+            value="`!tournament bracket` - ブラケット確認\n"
+                  "`!tournament next` - 次の試合確認\n"
+                  "`!tournament result @勝者` - 結果入力",
+            inline=False
+        )
+        
+        # ボタンを無効化
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.edit_original_response(embed=embed, view=self)
+        await interaction.followup.send("🎉 トーナメントが開始されました！", ephemeral=False)
+
+async def create_tournament_embed(tournament, guild):
+    """トーナメント募集のEmbed作成"""
+    # 参加者リスト作成
+    participants_list = []
+    
+    for participant in tournament['participants']:
+        participants_list.append(f"• {participant['user'].display_name}")
+    
+    status_map = {
+        'registration': '📝 参加者募集中',
+        'ongoing': '⚔️ 進行中',
+        'ended': '🏁 終了'
+    }
+    
+    current_count = len(tournament['participants'])
+    max_participants = tournament['max_participants']
+    
+    title = "🏆 トーナメント募集"
+    if current_count >= 4:
+        title = "🎉 トーナメント募集（開始可能）"
+    if current_count >= max_participants:
+        title = "🔥 トーナメント募集（満員）"
+    
+    embed = discord.Embed(
+        title=title,
+        description=f"**{tournament['tournament_type']}** の参加者を募集中",
+        color=0xffd700 if current_count >= 4 else 0x4a90e2
+    )
+    
+    embed.add_field(
+        name="📊 募集情報",
+        value=f"**形式:** {tournament['tournament_type']}\n"
+              f"**最大人数:** {max_participants}人\n"
+              f"**最小開始人数:** 4人\n"
+              f"**現在の参加者:** {current_count}/{max_participants}人\n"
+              f"**ステータス:** {status_map.get(tournament['status'], tournament['status'])}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list[:8]) + ("..." if len(participants_list) > 8 else "") if participants_list else "なし",
+        inline=True
+    )
+    
+    if tournament.get('description'):
+        embed.add_field(
+            name="📝 詳細",
+            value=tournament['description'],
+            inline=False
+        )
+    
+    if current_count >= 4:
+        embed.add_field(
+            name="🎯 開始可能",
+            value="開始ボタンまたは `!tournament start` で開始できます！",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"作成者: {tournament['creator'].display_name} | ID: {tournament['id'][:8]}")
+    
+    return embed
+
 # ===============================
 # スクリム/カスタムゲーム機能
 # ===============================
@@ -6256,6 +6603,12 @@ async def tournament_manager(ctx, action=None, *args):
             )
             
             embed.add_field(
+                name="⚙️ 管理コマンド",
+                value="`!tournament add @ユーザー` - メンバー手動追加",
+                inline=False
+            )
+            
+            embed.add_field(
                 name="🎯 形式例",
                 value="`!tournament create シングル戦` - シングル戦\n"
                       "`!tournament create ダブル戦` - ダブル戦\n"
@@ -6294,6 +6647,9 @@ async def tournament_manager(ctx, action=None, *args):
             
         elif action.lower() in ['end', 'finish', '終了']:
             await end_tournament(ctx)
+            
+        elif action.lower() in ['add', 'invite', '追加', '招待']:
+            await add_to_tournament(ctx, args)
             
         else:
             await ctx.send("❌ 不明なアクション。`!tournament` でヘルプを確認してください。")
@@ -6375,9 +6731,21 @@ async def create_tournament(ctx, args):
         inline=False
     )
     
-    embed.set_footer(text=f"作成者: {ctx.author.display_name} | ID: {tournament_data['id'][:8]}")
+    # ボタン付き募集メッセージ作成
+    embed = await create_tournament_embed(tournament_data, ctx.guild)
     
-    await ctx.send(embed=embed)
+    # 操作方法を追加（ボタンとコマンド両方）
+    embed.add_field(
+        name="🔧 操作方法",
+        value="**ボタン操作:** 下のボタンをクリック\n"
+              "**コマンド操作:** `!tournament join/leave/status`",
+        inline=False
+    )
+    
+    view = TournamentView()
+    message = await ctx.send(embed=embed, view=view)
+    tournament_data['message_id'] = message.id
+    view.message = message  # ビューにメッセージオブジェクトを保存
 
 async def join_tournament(ctx):
     """トーナメント参加"""
@@ -6919,6 +7287,111 @@ async def end_tournament(ctx):
         )
     
     await ctx.send(embed=embed)
+
+async def add_to_tournament(ctx, args):
+    """トーナメントにメンバーを手動追加"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    if tournament['status'] != 'registration':
+        await ctx.send("❌ 現在参加登録を受け付けていません。")
+        return
+    
+    # 権限チェック（作成者または管理者のみ）
+    if ctx.author.id != tournament['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ トーナメント作成者または管理者のみメンバーを追加できます。")
+        return
+    
+    # メンションされたユーザーを取得
+    mentioned_users = ctx.message.mentions
+    if not mentioned_users:
+        await ctx.send("❌ 追加するユーザーをメンションしてください。例: `!tournament add @ユーザー1 @ユーザー2`")
+        return
+    
+    added_users = []
+    already_joined = []
+    tournament_full = []
+    
+    for user in mentioned_users:
+        user_id = user.id
+        
+        # 既に参加しているかチェック
+        if user_id in [p['user_id'] for p in tournament['participants']]:
+            already_joined.append(user.display_name)
+            continue
+        
+        # 満員チェック
+        if len(tournament['participants']) >= tournament['max_participants']:
+            tournament_full.append(user.display_name)
+            continue
+        
+        # 参加者として追加
+        participant = {
+            'user_id': user_id,
+            'user': user,
+            'joined_at': datetime.now(),
+            'wins': 0,
+            'losses': 0
+        }
+        
+        tournament['participants'].append(participant)
+        added_users.append(user.display_name)
+    
+    # 結果の報告
+    embed = discord.Embed(
+        title="👥 トーナメントメンバー追加結果",
+        color=0x00ff88
+    )
+    
+    if added_users:
+        embed.add_field(
+            name="✅ 追加成功",
+            value="\n".join([f"• {name}" for name in added_users]),
+            inline=False
+        )
+    
+    if already_joined:
+        embed.add_field(
+            name="⚠️ 既に参加済み",
+            value="\n".join([f"• {name}" for name in already_joined]),
+            inline=False
+        )
+    
+    if tournament_full:
+        embed.add_field(
+            name="❌ 満員のため追加不可",
+            value="\n".join([f"• {name}" for name in tournament_full]),
+            inline=False
+        )
+    
+    current_count = len(tournament['participants'])
+    max_participants = tournament['max_participants']
+    
+    embed.add_field(
+        name="📊 現在の状況",
+        value=f"**参加者数:** {current_count}/{max_participants}人\n"
+              f"**開始可能:** {'はい' if current_count >= 4 else 'いいえ（最低4人必要）'}",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+    
+    # トーナメントメッセージを更新（ボタン付きメッセージがある場合）
+    if 'message_id' in tournament:
+        try:
+            channel = ctx.channel
+            message = await channel.fetch_message(tournament['message_id'])
+            updated_embed = await create_tournament_embed(tournament, ctx.guild)
+            view = TournamentView()
+            await message.edit(embed=updated_embed, view=view)
+            view.message = message
+        except Exception as e:
+            print(f"トーナメントメッセージ更新エラー: {e}")
 
 # Botを起動
 if __name__ == "__main__":
