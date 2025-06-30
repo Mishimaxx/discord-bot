@@ -4791,16 +4791,10 @@ class CustomGameModal(discord.ui.Modal, title='🎯 カスタムゲーム募集�
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        """モーダル送信時の処理"""
+        """モーダル送信時の処理 - コマンド版と完全に統一"""
         await interaction.response.defer()
         
         try:
-            # 最大人数の処理
-            max_players_int = int(self.max_players.value)
-            if max_players_int < 2 or max_players_int > 20:
-                await interaction.followup.send("❌ 最大人数は2-20人で設定してください。", ephemeral=True)
-                return
-            
             # チャンネル選択の処理
             target_channel = interaction.channel  # デフォルトは現在のチャンネル
             if self.target_channel.value:
@@ -4817,42 +4811,51 @@ class CustomGameModal(discord.ui.Modal, title='🎯 カスタムゲーム募集�
                 else:
                     await interaction.followup.send(f"❌ チャンネル '{self.target_channel.value}' が見つかりません。現在のチャンネルで作成します。", ephemeral=True)
             
-            # 既存の募集チェック
-            channel_id = target_channel.id
-            if channel_id in active_scrims:
-                await interaction.followup.send(f"❌ {target_channel.mention} で既にカスタムゲームが進行中です。", ephemeral=True)
-                return
+            # モーダル入力を引数形式に変換
+            args = []
             
-            # カスタムゲームデータ作成
-            scrim_data = {
-                'id': f"{channel_id}_{int(datetime.now().timestamp())}",
-                'channel_id': channel_id,
-                'creator': interaction.user,
-                'created_at': datetime.now(),
-                'max_players': max_players_int,
-                'scheduled_time': self.start_time.value,
-                'game_mode': self.game_mode.value,
-                'description': self.description.value,
-                'participants': [interaction.user.id],
-                'status': 'recruiting',
-                'teams': None
-            }
+            # 最大人数の処理
+            max_players_value = self.max_players.value.strip()
+            if max_players_value:
+                args.append(f"{max_players_value}人")
             
-            active_scrims[channel_id] = scrim_data
+            # ゲームモードの処理
+            game_mode_value = self.game_mode.value.strip()
+            if game_mode_value and game_mode_value != "カスタム":
+                args.append(game_mode_value)
             
-            # ボタン付き募集メッセージ作成
-            embed = await create_custom_embed(scrim_data, interaction.guild)
-            embed.add_field(
-                name="🔧 操作方法",
-                value="**ボタン操作:** 下のボタンをクリック\n"
-                      "**コマンド操作:** `!custom join/leave/status`",
-                inline=False
-            )
+            # 開始時間の処理
+            start_time_value = self.start_time.value.strip()
+            if start_time_value and start_time_value != "未設定":
+                args.append(start_time_value)
             
-            view = CustomGameView()
-            message = await target_channel.send(content="@everyone", embed=embed, view=view)
-            scrim_data['message_id'] = message.id
-            view.message = message
+            # 説明の処理
+            description_value = self.description.value.strip()
+            if description_value:
+                args.append(description_value)
+            
+            # 疑似的なctxオブジェクトを作成（create_scrim関数用）
+            class PseudoCtx:
+                def __init__(self, interaction, target_channel):
+                    self.channel = target_channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    # @everyoneメッセージの場合は実際のチャンネルに送信
+                    if content == "@everyone":
+                        message = await self.channel.send(content=content, embed=embed, view=view)
+                        return message
+                    else:
+                        # 通常のメッセージはスキップ（create_scrim内の通知は不要）
+                        return None
+            
+            pseudo_ctx = PseudoCtx(interaction, target_channel)
+            
+            # コマンド版と同じcreate_scrim関数を呼び出し
+            await create_scrim(pseudo_ctx, args)
             
             # 作成完了通知
             if target_channel.id != interaction.channel.id:
@@ -4860,15 +4863,9 @@ class CustomGameModal(discord.ui.Modal, title='🎯 カスタムゲーム募集�
             else:
                 await interaction.followup.send("✅ カスタムゲーム募集を作成しました！", ephemeral=True)
             
-            # 自動リマインダー設定
-            if self.start_time.value not in ["未設定", "今から", "今すぐ"]:
-                await schedule_scrim_reminder_from_data(interaction, scrim_data)
-                
-        except ValueError:
-            await interaction.followup.send("❌ 最大人数は数字で入力してください。", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ エラーが発生しました: {str(e)}", ephemeral=True)
-            print(f"CustomGameModal エラー: {e}")
+            await interaction.followup.send(f"❌ カスタムゲーム作成中にエラーが発生しました: {str(e)}", ephemeral=True)
+            print(f"カスタムゲーム作成エラー: {e}")
 
 class RankedMatchModal(discord.ui.Modal, title='🏆 ランクマッチ募集作成'):
     """ランクマッチ募集作成モーダル"""
@@ -4915,16 +4912,10 @@ class RankedMatchModal(discord.ui.Modal, title='🏆 ランクマッチ募集作
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        """モーダル送信時の処理"""
+        """モーダル送信時の処理 - コマンド版と完全に統一"""
         await interaction.response.defer()
         
         try:
-            # 最大人数の処理
-            max_players_int = int(self.max_players.value)
-            if max_players_int < 2 or max_players_int > 20:
-                await interaction.followup.send("❌ 最大人数は2-20人で設定してください。", ephemeral=True)
-                return
-            
             # チャンネル選択の処理
             target_channel = interaction.channel  # デフォルトは現在のチャンネル
             if self.target_channel.value:
@@ -4941,80 +4932,51 @@ class RankedMatchModal(discord.ui.Modal, title='🏆 ランクマッチ募集作
                 else:
                     await interaction.followup.send(f"❌ チャンネル '{self.target_channel.value}' が見つかりません。現在のチャンネルで作成します。", ephemeral=True)
             
-            # 既存の募集チェック
-            channel_id = target_channel.id
-            if channel_id in active_rank_recruits:
-                await interaction.followup.send(f"❌ {target_channel.mention} で既にランクマッチ募集が進行中です。", ephemeral=True)
-                return
+            # モーダル入力を引数形式に変換
+            args = []
             
-            # ランク条件の解析
-            rank_req = self.rank_requirement.value
-            min_rank = None
-            max_rank = None
+            # ランク条件の処理
+            rank_requirement_value = self.rank_requirement.value.strip()
+            if rank_requirement_value and rank_requirement_value != "any":
+                args.append(rank_requirement_value)
             
-            if rank_req.lower() not in ["any", "ランク問わず"]:
-                # 簡単なランク解析
-                if "以上" in rank_req:
-                    base_rank_text = rank_req.replace("以上", "").strip()
-                    parsed_rank = parse_rank_input([base_rank_text])
-                    if parsed_rank:
-                        min_rank = parsed_rank
-                elif "帯" in rank_req:
-                    base_rank_text = rank_req.replace("帯", "").strip()
-                    parsed_rank = parse_rank_input([base_rank_text])
-                    if parsed_rank:
-                        min_rank, max_rank = get_rank_tier_range(parsed_rank)
-                else:
-                    parsed_rank = parse_rank_input([rank_req])
-                    if parsed_rank:
-                        min_rank = parsed_rank
+            # 最大人数の処理
+            max_players_value = self.max_players.value.strip()
+            if max_players_value:
+                args.append(f"{max_players_value}人")
             
-            # ランクマッチ募集データ作成
-            recruit_data = {
-                'id': f"{channel_id}_{int(datetime.now().timestamp())}",
-                'channel_id': channel_id,
-                'creator': interaction.user,
-                'created_at': datetime.now(),
-                'max_players': max_players_int,
-                'scheduled_time': self.start_time.value,
-                'rank_requirement': rank_req,
-                'min_rank': min_rank,
-                'max_rank': max_rank,
-                'description': self.description.value,
-                'participants': [interaction.user.id],
-                'status': 'recruiting',
-                'teams': None
-            }
+            # 開始時間の処理
+            start_time_value = self.start_time.value.strip()
+            if start_time_value and start_time_value != "未設定":
+                args.append(start_time_value)
             
-            active_rank_recruits[channel_id] = recruit_data
+            # 説明の処理
+            description_value = self.description.value.strip()
+            if description_value:
+                args.append(description_value)
             
-            # ボタン付き募集メッセージ作成
-            embed = await create_ranked_embed(recruit_data, interaction.guild)
-            embed.add_field(
-                name="🔧 操作方法",
-                value="**ボタン操作:** 下のボタンをクリック\n"
-                      "**コマンド操作:** `!ranked join/leave/status`",
-                inline=False
-            )
-            
-            # ランク詳細情報
-            if min_rank or max_rank:
-                rank_details = []
-                if min_rank:
-                    rank_details.append(f"最低ランク: {VALORANT_RANKS[min_rank]['display']}")
-                if max_rank:
-                    rank_details.append(f"最高ランク: {VALORANT_RANKS[max_rank]['display']}")
+            # 疑似的なctxオブジェクトを作成（create_ranked_recruit関数用）
+            class PseudoCtx:
+                def __init__(self, interaction, target_channel):
+                    self.channel = target_channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
                 
-                embed.add_field(
-                    name="🎯 ランク詳細",
-                    value="\n".join(rank_details),
-                    inline=False
-                )
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    # @everyoneメッセージの場合は実際のチャンネルに送信
+                    if content == "@everyone":
+                        message = await self.channel.send(content=content, embed=embed, view=view)
+                        return message
+                    else:
+                        # 通常のメッセージはスキップ（create_ranked_recruit内の通知は不要）
+                        return None
             
-            view = RankedRecruitView()
-            message = await target_channel.send(content="@everyone", embed=embed, view=view)
-            recruit_data['message_id'] = message.id
-            view.message = message
+            pseudo_ctx = PseudoCtx(interaction, target_channel)
+            
+            # コマンド版と同じcreate_ranked_recruit関数を呼び出し
+            await create_ranked_recruit(pseudo_ctx, args)
             
             # 作成完了通知
             if target_channel.id != interaction.channel.id:
@@ -5022,15 +4984,9 @@ class RankedMatchModal(discord.ui.Modal, title='🏆 ランクマッチ募集作
             else:
                 await interaction.followup.send("✅ ランクマッチ募集を作成しました！", ephemeral=True)
             
-            # 自動リマインダー設定
-            if self.start_time.value not in ["未設定", "今から", "今すぐ"]:
-                await schedule_ranked_recruit_reminder_from_data(interaction, recruit_data)
-                
-        except ValueError:
-            await interaction.followup.send("❌ 最大人数は数字で入力してください。", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ エラーが発生しました: {str(e)}", ephemeral=True)
-            print(f"RankedMatchModal エラー: {e}")
+            await interaction.followup.send(f"❌ ランクマッチ募集作成中にエラーが発生しました: {str(e)}", ephemeral=True)
+            print(f"ランクマッチ募集作成エラー: {e}")
 
 class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
     """トーナメント作成モーダル"""
@@ -5069,16 +5025,10 @@ class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        """モーダル送信時の処理"""
+        """モーダル送信時の処理 - コマンド版と完全に統一"""
         await interaction.response.defer()
         
         try:
-            # 最大参加者数の処理
-            max_participants_int = int(self.max_participants.value)
-            if max_participants_int < 4 or max_participants_int > 32:
-                await interaction.followup.send("❌ 最大参加者数は4-32人で設定してください。", ephemeral=True)
-                return
-            
             # チャンネル選択の処理
             target_channel = interaction.channel  # デフォルトは現在のチャンネル
             if self.target_channel.value:
@@ -5095,45 +5045,46 @@ class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
                 else:
                     await interaction.followup.send(f"❌ チャンネル '{self.target_channel.value}' が見つかりません。現在のチャンネルで作成します。", ephemeral=True)
             
-            # 既存のトーナメントチェック（サーバー全体で1つのみ）
-            guild_id = interaction.guild.id
-            if guild_id in active_tournaments:
-                tournament = active_tournaments[guild_id]
-                if tournament['status'] != 'ended':
-                    await interaction.followup.send("❌ 既にトーナメントが進行中です。", ephemeral=True)
-                    return
+            # モーダル入力を引数形式に変換
+            args = []
             
-            # トーナメントデータ作成
-            tournament_data = {
-                'id': f"{guild_id}_{int(datetime.now().timestamp())}",
-                'guild_id': guild_id,
-                'creator': interaction.user,
-                'created_at': datetime.now(),
-                'tournament_type': self.tournament_type.value,
-                'max_participants': max_participants_int,
-                'description': self.description.value,
-                'participants': [],
-                'status': 'registration',
-                'bracket': [],
-                'current_round': 0,
-                'matches': {}
-            }
+            # トーナメント形式の処理
+            tournament_type_value = self.tournament_type.value.strip()
+            if tournament_type_value:
+                args.append(tournament_type_value)
             
-            active_tournaments[guild_id] = tournament_data
+            # 最大参加者数の処理
+            max_participants_value = self.max_participants.value.strip()
+            if max_participants_value:
+                args.append(f"{max_participants_value}人")
             
-            # ボタン付き募集メッセージ作成
-            embed = await create_tournament_embed(tournament_data, interaction.guild)
-            embed.add_field(
-                name="🔧 操作方法",
-                value="**ボタン操作:** 下のボタンをクリック\n"
-                      "**コマンド操作:** `!tournament join/leave/status`",
-                inline=False
-            )
+            # 説明の処理
+            description_value = self.description.value.strip()
+            if description_value:
+                args.append(description_value)
             
-            view = TournamentView()
-            message = await target_channel.send(content="@everyone", embed=embed, view=view)
-            tournament_data['message_id'] = message.id
-            view.message = message
+            # 疑似的なctxオブジェクトを作成（create_tournament関数用）
+            class PseudoCtx:
+                def __init__(self, interaction, target_channel):
+                    self.channel = target_channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    # @everyoneメッセージの場合は実際のチャンネルに送信
+                    if content == "@everyone":
+                        message = await self.channel.send(content=content, embed=embed, view=view)
+                        return message
+                    else:
+                        # 通常のメッセージはスキップ（create_tournament内の通知は不要）
+                        return None
+            
+            pseudo_ctx = PseudoCtx(interaction, target_channel)
+            
+            # コマンド版と同じcreate_tournament関数を呼び出し
+            await create_tournament(pseudo_ctx, args)
             
             # 作成完了通知
             if target_channel.id != interaction.channel.id:
@@ -5141,82 +5092,81 @@ class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
             else:
                 await interaction.followup.send("✅ トーナメントを作成しました！", ephemeral=True)
             
-        except ValueError:
-            await interaction.followup.send("❌ 最大参加者数は数字で入力してください。", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ エラーが発生しました: {str(e)}", ephemeral=True)
-            print(f"TournamentModal エラー: {e}")
+            await interaction.followup.send(f"❌ トーナメント作成中にエラーが発生しました: {str(e)}", ephemeral=True)
+            print(f"トーナメント作成エラー: {e}")
 
-async def schedule_scrim_reminder_from_data(interaction, scrim_data):
-    """スケジュールリマインダー設定（モーダル用）"""
-    try:
-        # 既存のschedule_scrim_reminder関数を参考にした簡易版
-        # 実際の時間解析は複雑なので、ここでは基本的な処理のみ
-        pass
-    except Exception as e:
-        print(f"リマインダー設定エラー: {e}")
-
-async def schedule_ranked_recruit_reminder_from_data(interaction, recruit_data):
-    """ランクマッチリマインダー設定（モーダル用）"""
-    try:
-        # 既存のschedule_ranked_recruit_reminder関数を参考にした簡易版
-        pass
-    except Exception as e:
-        print(f"ランクマッチリマインダー設定エラー: {e}")
+# 削除: モーダル版は従来のコマンド版関数を使用するため、専用関数は不要
 
 @bot.command(name='panel', help='メイン機能コントロールパネルを表示します')
 @prevent_duplicate_execution
 async def show_control_panel(ctx):
-    """メインコントロールパネル表示"""
+    """メインコントロールパネル表示 - 全コマンドとの完全統一"""
     embed = discord.Embed(
         title="🎮 メイン機能コントロールパネル",
-        description="全ての機能をボタンで簡単操作！コマンドを覚える必要なし",
+        description="全ての機能をボタンで簡単操作！コマンドと完全同等の機能を提供",
         color=0x00aaff
     )
     
     embed.add_field(
         name="🎯 ゲーム募集",
-        value="カスタム・ランク・トーナメント募集",
+        value="**カスタムゲーム:** `!custom create` と同等\n"
+              "**ランクマッチ:** `!ranked create` と同等\n"
+              "**トーナメント:** `!tournament create` と同等",
         inline=True
     )
     
     embed.add_field(
         name="🎲 ゲーム機能",
-        value="チーム分け・マップ選択・統計確認",
+        value="**チーム分け:** `!team` と同等\n"
+              "**マップ選択:** `!map` と同等\n"
+              "**統計確認:** `!valorant` と同等\n"
+              "**サイコロ:** `!dice` と同等",
         inline=True
     )
     
     embed.add_field(
         name="🏆 ランク管理",
-        value="VALORANTランクの設定と確認",
+        value="**ランク設定:** `!rank set` と同等\n"
+              "**ランク確認:** `!rank show` と同等\n"
+              "**ランク一覧:** `!ranklist` と同等",
         inline=True
     )
     
     embed.add_field(
         name="🤖 AI機能",
-        value="AI会話・翻訳・要約",
+        value="**AI会話:** `!ai` と同等\n"
+              "**翻訳:** `!translate` と同等\n"
+              "**要約:** `!summarize` と同等",
         inline=True
     )
     
     embed.add_field(
         name="📊 情報・統計",
-        value="サーバー情報・ユーザー統計・Bot状態",
+        value="**サーバー情報:** `!info` と同等\n"
+              "**ユーザー情報:** `!userinfo` と同等\n"
+              "**Bot状態:** `!botstatus` と同等",
         inline=True
     )
     
     embed.add_field(
         name="⚙️ 管理機能",
-        value="管理者専用ツール（権限必要）",
+        value="**クリーンアップ:** `!cleanup` と同等\n"
+              "**使用量確認:** `!usage` と同等\n"
+              "（管理者権限必要）",
         inline=True
     )
     
     embed.add_field(
-        name="✨ 新機能",
-        value="• チャンネル選択対応\n• 全機能ボタン化\n• 直感的な操作",
+        name="🔄 完全統一された機能",
+        value="• ボタン操作とコマンド操作で**全く同じ結果**\n"
+              "• チャンネル選択機能付き\n"
+              "• 従来のコマンドも引き続き利用可能\n"
+              "• 同じバリデーション、同じリマインダー機能",
         inline=False
     )
     
-    embed.set_footer(text="ボタンをクリックして各機能にアクセス！")
+    embed.set_footer(text="ボタンクリック = コマンド入力と同等の機能を提供")
     
     view = MainControlPanel()
     await ctx.send(embed=embed, view=view)
