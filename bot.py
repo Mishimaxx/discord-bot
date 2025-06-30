@@ -4616,7 +4616,7 @@ async def create_scrim(ctx, args):
     )
     
     view = CustomGameView()
-    message = await ctx.send(embed=embed, view=view)
+    message = await ctx.send(content="@everyone", embed=embed, view=view)
     scrim_data['message_id'] = message.id
     view.message = message  # ビューにメッセージオブジェクトを保存
     
@@ -5478,7 +5478,7 @@ async def create_ranked_recruit(ctx, args):
         )
     
     view = RankedRecruitView()
-    message = await ctx.send(embed=embed, view=view)
+    message = await ctx.send(content="@everyone", embed=embed, view=view)
     recruit_data['message_id'] = message.id
     view.message = message  # ビューにメッセージオブジェクトを保存
     
@@ -6743,7 +6743,7 @@ async def create_tournament(ctx, args):
     )
     
     view = TournamentView()
-    message = await ctx.send(embed=embed, view=view)
+    message = await ctx.send(content="@everyone", embed=embed, view=view)
     tournament_data['message_id'] = message.id
     view.message = message  # ビューにメッセージオブジェクトを保存
 
