@@ -4257,37 +4257,87 @@ class GameToolsPanel(discord.ui.View):
         await interaction.response.defer()
         
         try:
-            # 疑似的なctxオブジェクトを作成（team_divide関数用）
-            class PseudoCtx:
-                def __init__(self, interaction):
-                    self.channel = interaction.channel
-                    self.author = interaction.user
-                    self.guild = interaction.guild
-                    self._interaction = interaction
-                    self.send = self._send_wrapper
-                    # prevent_duplicate_executionデコレータ用の属性追加
-                    self.id = interaction.id
+            # デコレータを迂回して直接実装
+            import random
+            
+            guild = interaction.guild
+            if not guild:
+                await interaction.followup.send("❌ このコマンドはサーバー内でのみ使用できます。", ephemeral=True)
+                return
+            
+            # オンラインの人間メンバーを取得
+            online_members = []
+            for member in guild.members:
+                if not member.bot and member.status != discord.Status.offline:
+                    online_members.append(member)
+            
+            # 全メンバー（オフライン含む）
+            all_human_members = [member for member in guild.members if not member.bot]
+            
+            if len(online_members) < 2:
+                if len(all_human_members) >= 2:
+                    members_to_use = all_human_members
+                    status_note = "（全メンバー対象）"
+                else:
+                    await interaction.followup.send("❌ チーム分けには最低2人のメンバーが必要です。", ephemeral=True)
+                    return
+            else:
+                members_to_use = online_members
+                status_note = "（オンラインメンバー対象）"
+            
+            # メンバーをランダムシャッフル
+            shuffled_members = members_to_use.copy()
+            random.shuffle(shuffled_members)
+            
+            # チーム分け結果の作成
+            member_count = len(shuffled_members)
+            embed = discord.Embed(title="🎯 チーム分け結果", color=0x00ff00)
+            
+            if member_count == 2:
+                # 1v1
+                embed.add_field(
+                    name="🔴 プレイヤー1",
+                    value=f"• {shuffled_members[0].display_name}",
+                    inline=True
+                )
+                embed.add_field(
+                    name="🔵 プレイヤー2", 
+                    value=f"• {shuffled_members[1].display_name}",
+                    inline=True
+                )
+                embed.set_footer(text=f"自動選択: 1v1形式 {status_note}")
+            else:
+                # 2v1以上
+                team_size = member_count // 2
+                team1 = shuffled_members[:team_size]
+                team2 = shuffled_members[team_size:team_size*2]
                 
-                async def _send_wrapper(self, content=None, embed=None, view=None):
-                    try:
-                        await self._interaction.followup.send(content=content, embed=embed, view=view)
-                    except Exception as e:
-                        print(f"チーム分けボタンの送信エラー: {e}")
-                        # フォールバック：エフェメラルメッセージで送信
-                        try:
-                            await self._interaction.followup.send(
-                                content="⚠️ 一時的なエラーが発生しました。",
-                                ephemeral=True
-                            )
-                        except:
-                            pass
+                embed.add_field(
+                    name=f"🔴 チーム1 ({len(team1)}人)",
+                    value="\n".join([f"• {m.display_name}" for m in team1]),
+                    inline=True
+                )
+                embed.add_field(
+                    name=f"🔵 チーム2 ({len(team2)}人)",
+                    value="\n".join([f"• {m.display_name}" for m in team2]),
+                    inline=True
+                )
+                
+                if len(shuffled_members) > team_size * 2:
+                    extras = shuffled_members[team_size*2:]
+                    embed.add_field(
+                        name="⚪ 待機",
+                        value="\n".join([f"• {m.display_name}" for m in extras]),
+                        inline=False
+                    )
+                
+                embed.set_footer(text=f"自動選択: {len(team1)}v{len(team2)}形式 {status_note}")
             
-            pseudo_ctx = PseudoCtx(interaction)
+            # 統計情報を追加
+            status_info = f"対象: {len(members_to_use)}人 (オンライン: {len(online_members)}人)"
+            embed.add_field(name="📊 情報", value=status_info, inline=False)
             
-            print(f"チーム分けボタン: ユーザーID {interaction.user.id}, チャンネル {interaction.channel.name}")
-            
-            # コマンド版と同じteam_divide関数を呼び出し
-            await team_divide(pseudo_ctx, None)
+            await interaction.followup.send(embed=embed)
             
         except Exception as e:
             print(f"チーム分けボタンエラー詳細: {type(e).__name__}: {str(e)}")
@@ -4300,35 +4350,29 @@ class GameToolsPanel(discord.ui.View):
         try:
             await interaction.response.defer()
             
-            # 疑似的なctxオブジェクトを作成（valorant_map_roulette関数用）
-            class PseudoCtx:
-                def __init__(self, interaction):
-                    self.channel = interaction.channel
-                    self.author = interaction.user
-                    self.guild = interaction.guild
-                    self._interaction = interaction
-                    self.send = self._send_wrapper
-                    # prevent_duplicate_executionデコレータ用の属性追加
-                    self.id = interaction.id
-                
-                async def _send_wrapper(self, content=None, embed=None, view=None):
-                    try:
-                        await self._interaction.followup.send(content=content, embed=embed, view=view)
-                    except Exception as e:
-                        print(f"マップ選択ボタンの送信エラー: {e}")
-                        # フォールバック：エフェメラルメッセージで送信
-                        try:
-                            await self._interaction.followup.send(
-                                content="⚠️ 一時的なエラーが発生しました。",
-                                ephemeral=True
-                            )
-                        except:
-                            pass
+            # デコレータを迂回して直接実装
+            import random
             
-            pseudo_ctx = PseudoCtx(interaction)
+            # マップをランダムに選択
+            map_key = random.choice(list(VALORANT_MAPS.keys()))
+            map_info = VALORANT_MAPS[map_key]
             
-            # コマンド版と同じvaloranta_map_roulette関数を呼び出し
-            await valorant_map_roulette(pseudo_ctx, 1)
+            embed = discord.Embed(
+                title="🎯 VALORANTマップルーレット",
+                description=f"**{map_info['emoji']} {map_key} ({map_info['name']})**",
+                color=0xff4655
+            )
+            
+            embed.add_field(name="📍 サイト", value=map_info['sites'], inline=True)
+            embed.add_field(name="ℹ️ 説明", value=map_info['description'], inline=False)
+            
+            # マップ画像を表示
+            if 'image_url' in map_info:
+                embed.set_image(url=map_info['image_url'])
+            
+            embed.set_footer(text="Good luck, have fun! 🎮")
+            
+            await interaction.followup.send(embed=embed)
             
         except Exception as e:
             print(f"マップ選択ボタンエラー: {e}")
@@ -4351,35 +4395,10 @@ class GameToolsPanel(discord.ui.View):
         try:
             await interaction.response.defer()
             
-            # 疑似的なctxオブジェクトを作成（roll_dice関数用）
-            class PseudoCtx:
-                def __init__(self, interaction):
-                    self.channel = interaction.channel
-                    self.author = interaction.user
-                    self.guild = interaction.guild
-                    self._interaction = interaction
-                    self.send = self._send_wrapper
-                    # prevent_duplicate_executionデコレータ用の属性追加
-                    self.id = interaction.id
-                
-                async def _send_wrapper(self, content=None, embed=None, view=None):
-                    try:
-                        await self._interaction.followup.send(content=content, embed=embed, view=view)
-                    except Exception as e:
-                        print(f"サイコロボタンの送信エラー: {e}")
-                        # フォールバック：エフェメラルメッセージで送信
-                        try:
-                            await self._interaction.followup.send(
-                                content="⚠️ 一時的なエラーが発生しました。",
-                                ephemeral=True
-                            )
-                        except:
-                            pass
-            
-            pseudo_ctx = PseudoCtx(interaction)
-            
-            # コマンド版と同じroll_dice関数を呼び出し
-            await roll_dice(pseudo_ctx, 6)
+            # デコレータを迂回して直接実装
+            import random
+            result = random.randint(1, 6)
+            await interaction.followup.send(f'🎲 6面サイコロの結果: **{result}**')
             
         except Exception as e:
             print(f"サイコロボタンエラー: {e}")
