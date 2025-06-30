@@ -5490,50 +5490,65 @@ async def add_to_ranked_recruit(ctx, args):
             if len(recruit['participants']) >= recruit['max_players']:
                 recruit['status'] = 'ready'
     
-    # 結果メッセージ
-    embed = discord.Embed(
-        title="👥 ランクマッチ募集参加者追加",
-        color=0x4a90e2
-    )
+    # 既存の募集メッセージを更新
+    try:
+        if 'message_id' in recruit:
+            channel = ctx.channel
+            message = await channel.fetch_message(recruit['message_id'])
+            
+            # 最新の募集情報でembedを再作成
+            updated_embed = await create_ranked_embed(recruit, ctx.guild)
+            
+            # 操作方法を追加（元のメッセージと同じ形式）
+            updated_embed.add_field(
+                name="🔧 操作方法",
+                value="**ボタン操作:** 下のボタンをクリック\n"
+                      "**コマンド操作:** `!ranked join/leave/status`",
+                inline=False
+            )
+            
+            # ランク条件の詳細表示（元のメッセージと同じ形式）
+            if recruit.get('min_rank') or recruit.get('max_rank'):
+                rank_details = []
+                if recruit.get('min_rank'):
+                    rank_details.append(f"最低ランク: {VALORANT_RANKS[recruit['min_rank']]['display']}")
+                if recruit.get('max_rank'):
+                    rank_details.append(f"最高ランク: {VALORANT_RANKS[recruit['max_rank']]['display']}")
+                
+                updated_embed.add_field(
+                    name="🎯 ランク詳細",
+                    value="\n".join(rank_details),
+                    inline=False
+                )
+            
+            # メッセージを更新（ボタンは維持）
+            await message.edit(embed=updated_embed)
+    except:
+        pass  # メッセージ更新に失敗した場合はスキップ
+    
+    # 簡潔な確認メッセージ
+    result_messages = []
     
     if added_users:
-        embed.add_field(
-            name="✅ 追加されたメンバー",
-            value="\n".join([f"• {name}" for name in added_users]),
-            inline=False
-        )
+        result_messages.append(f"✅ **追加完了:** {', '.join(added_users)}")
     
     if already_joined:
-        embed.add_field(
-            name="⚠️ 既に参加済み",
-            value="\n".join([f"• {name}" for name in already_joined]),
-            inline=False
-        )
+        result_messages.append(f"⚠️ **既に参加済み:** {', '.join(already_joined)}")
     
     if max_capacity:
-        embed.add_field(
-            name="❌ 満員のため追加不可",
-            value="\n".join([f"• {name}" for name in max_capacity]),
-            inline=False
-        )
+        result_messages.append(f"❌ **満員のため追加不可:** {', '.join(max_capacity)}")
     
     if rank_ineligible:
-        embed.add_field(
-            name="❌ ランク条件不適合",
-            value="\n".join([f"• {name}" for name in rank_ineligible]) + 
-                  f"\n**条件:** {recruit['rank_requirement']}",
-            inline=False
-        )
+        result_messages.append(f"❌ **ランク条件不適合:** {', '.join(rank_ineligible)}")
     
-    current_count = len(recruit['participants'])
-    embed.add_field(
-        name="📊 現在の状況",
-        value=f"参加者: {current_count}/{recruit['max_players']}人\n"
-              f"ランク条件: {recruit['rank_requirement']}",
-        inline=False
-    )
-    
-    await ctx.send(embed=embed)
+    if result_messages:
+        current_count = len(recruit['participants'])
+        status_text = f"📊 現在 {current_count}/{recruit['max_players']}人"
+        
+        final_message = "\n".join(result_messages) + f"\n{status_text}"
+        await ctx.send(final_message)
+    else:
+        await ctx.send("ℹ️ 処理するユーザーがありませんでした。")
 
 async def kick_from_ranked_recruit(ctx, args):
     """ランクマッチ募集からユーザーをキック"""
@@ -5925,41 +5940,48 @@ async def add_to_scrim(ctx, args):
             if len(scrim['participants']) >= scrim['max_players']:
                 scrim['status'] = 'ready'
     
-    # 結果メッセージ
-    embed = discord.Embed(
-        title="👥 カスタムゲーム参加者追加",
-        color=0x00ff88
-    )
+    # 既存の募集メッセージを更新
+    try:
+        if 'message_id' in scrim:
+            channel = ctx.channel
+            message = await channel.fetch_message(scrim['message_id'])
+            
+            # 最新の募集情報でembedを再作成
+            updated_embed = await create_custom_embed(scrim, ctx.guild)
+            
+            # 操作方法を追加（元のメッセージと同じ形式）
+            updated_embed.add_field(
+                name="🔧 操作方法",
+                value="**ボタン操作:** 下のボタンをクリック\n"
+                      "**コマンド操作:** `!custom join/leave/status`",
+                inline=False
+            )
+            
+            # メッセージを更新（ボタンは維持）
+            await message.edit(embed=updated_embed)
+    except:
+        pass  # メッセージ更新に失敗した場合はスキップ
+    
+    # 簡潔な確認メッセージ
+    result_messages = []
     
     if added_users:
-        embed.add_field(
-            name="✅ 追加されたメンバー",
-            value="\n".join([f"• {name}" for name in added_users]),
-            inline=False
-        )
+        result_messages.append(f"✅ **追加完了:** {', '.join(added_users)}")
     
     if already_joined:
-        embed.add_field(
-            name="⚠️ 既に参加済み",
-            value="\n".join([f"• {name}" for name in already_joined]),
-            inline=False
-        )
+        result_messages.append(f"⚠️ **既に参加済み:** {', '.join(already_joined)}")
     
     if max_capacity:
-        embed.add_field(
-            name="❌ 満員のため追加不可",
-            value="\n".join([f"• {name}" for name in max_capacity]),
-            inline=False
-        )
+        result_messages.append(f"❌ **満員のため追加不可:** {', '.join(max_capacity)}")
     
-    current_count = len(scrim['participants'])
-    embed.add_field(
-        name="📊 現在の状況",
-        value=f"参加者: {current_count}/{scrim['max_players']}人",
-        inline=False
-    )
-    
-    await ctx.send(embed=embed)
+    if result_messages:
+        current_count = len(scrim['participants'])
+        status_text = f"📊 現在 {current_count}/{scrim['max_players']}人"
+        
+        final_message = "\n".join(result_messages) + f"\n{status_text}"
+        await ctx.send(final_message)
+    else:
+        await ctx.send("ℹ️ 処理するユーザーがありませんでした。")
 
 async def kick_from_scrim(ctx, args):
     """カスタムゲームからユーザーをキック"""
