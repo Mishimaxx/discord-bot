@@ -4256,22 +4256,33 @@ class GameToolsPanel(discord.ui.View):
     async def team_divide_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        # 疑似的なctxオブジェクトを作成（team_divide関数用）
-        class PseudoCtx:
-            def __init__(self, interaction):
-                self.channel = interaction.channel
-                self.author = interaction.user
-                self.guild = interaction.guild
-                self._interaction = interaction
-                self.send = self._send_wrapper
+        try:
+            # 疑似的なctxオブジェクトを作成（team_divide関数用）
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                    # prevent_duplicate_executionデコレータ用の属性追加
+                    self.id = interaction.id
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    await self._interaction.followup.send(content=content, embed=embed, view=view)
             
-            async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view)
-        
-        pseudo_ctx = PseudoCtx(interaction)
-        
-        # コマンド版と同じteam_divide関数を呼び出し
-        await team_divide(pseudo_ctx, None)
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            print(f"チーム分けボタン: ユーザーID {interaction.user.id}, チャンネル {interaction.channel.name}")
+            
+            # コマンド版と同じteam_divide関数を呼び出し
+            await team_divide(pseudo_ctx, None)
+            
+        except Exception as e:
+            print(f"チーム分けボタンエラー詳細: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            await interaction.followup.send(f"❌ チーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
     
     @discord.ui.button(label='🗺️ マップ選択', style=discord.ButtonStyle.success, row=0)
     async def map_select_button(self, interaction: discord.Interaction, button: discord.ui.Button):
