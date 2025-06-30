@@ -4254,96 +4254,7 @@ class GameToolsPanel(discord.ui.View):
     
     @discord.ui.button(label='🎯 チーム分け', style=discord.ButtonStyle.primary, row=0)
     async def team_divide_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        
-        try:
-            # デコレータを迂回して直接実装
-            import random
-            
-            guild = interaction.guild
-            if not guild:
-                await interaction.followup.send("❌ このコマンドはサーバー内でのみ使用できます。", ephemeral=True)
-                return
-            
-            # オンラインの人間メンバーを取得
-            online_members = []
-            for member in guild.members:
-                if not member.bot and member.status != discord.Status.offline:
-                    online_members.append(member)
-            
-            # 全メンバー（オフライン含む）
-            all_human_members = [member for member in guild.members if not member.bot]
-            
-            if len(online_members) < 2:
-                if len(all_human_members) >= 2:
-                    members_to_use = all_human_members
-                    status_note = "（全メンバー対象）"
-                else:
-                    await interaction.followup.send("❌ チーム分けには最低2人のメンバーが必要です。", ephemeral=True)
-                    return
-            else:
-                members_to_use = online_members
-                status_note = "（オンラインメンバー対象）"
-            
-            # メンバーをランダムシャッフル
-            shuffled_members = members_to_use.copy()
-            random.shuffle(shuffled_members)
-            
-            # チーム分け結果の作成
-            member_count = len(shuffled_members)
-            embed = discord.Embed(title="🎯 チーム分け結果", color=0x00ff00)
-            
-            if member_count == 2:
-                # 1v1
-                embed.add_field(
-                    name="🔴 プレイヤー1",
-                    value=f"• {shuffled_members[0].display_name}",
-                    inline=True
-                )
-                embed.add_field(
-                    name="🔵 プレイヤー2", 
-                    value=f"• {shuffled_members[1].display_name}",
-                    inline=True
-                )
-                embed.set_footer(text=f"自動選択: 1v1形式 {status_note}")
-            else:
-                # 2v1以上
-                team_size = member_count // 2
-                team1 = shuffled_members[:team_size]
-                team2 = shuffled_members[team_size:team_size*2]
-                
-                embed.add_field(
-                    name=f"🔴 チーム1 ({len(team1)}人)",
-                    value="\n".join([f"• {m.display_name}" for m in team1]),
-                    inline=True
-                )
-                embed.add_field(
-                    name=f"🔵 チーム2 ({len(team2)}人)",
-                    value="\n".join([f"• {m.display_name}" for m in team2]),
-                    inline=True
-                )
-                
-                if len(shuffled_members) > team_size * 2:
-                    extras = shuffled_members[team_size*2:]
-                    embed.add_field(
-                        name="⚪ 待機",
-                        value="\n".join([f"• {m.display_name}" for m in extras]),
-                        inline=False
-                    )
-                
-                embed.set_footer(text=f"自動選択: {len(team1)}v{len(team2)}形式 {status_note}")
-            
-            # 統計情報を追加
-            status_info = f"対象: {len(members_to_use)}人 (オンライン: {len(online_members)}人)"
-            embed.add_field(name="📊 情報", value=status_info, inline=False)
-            
-            await interaction.followup.send(embed=embed)
-            
-        except Exception as e:
-            print(f"チーム分けボタンエラー詳細: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            await interaction.followup.send(f"❌ チーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
+        await interaction.response.send_modal(TeamDivideModal())
     
     @discord.ui.button(label='🗺️ マップ選択', style=discord.ButtonStyle.success, row=0)
     async def map_select_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -4601,6 +4512,60 @@ class AdminToolsPanel(discord.ui.View):
 
 # ===== モーダルクラス =====
 # 統計確認モーダル（VALORANT統計とユーザー統計の両方に対応）
+class TeamDivideModal(discord.ui.Modal, title='🎯 チーム分け設定'):
+    def __init__(self):
+        super().__init__()
+    
+    target_type = discord.ui.TextInput(
+        label='対象メンバー',
+        placeholder='vc（VC内メンバー）または all（全メンバー）',
+        default='vc',
+        max_length=10
+    )
+    
+    format_type = discord.ui.TextInput(
+        label='チーム分け形式',
+        placeholder='1v1, 2v2, 3v3, 2v1, 4v4, 5v5 または auto（自動）',
+        default='auto',
+        max_length=10
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        try:
+            target = self.target_type.value.lower().strip()
+            format_choice = self.format_type.value.lower().strip()
+            
+            # 疑似的なctxオブジェクトを作成
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    await self._interaction.followup.send(content=content, embed=embed, view=view)
+            
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            # VC内チーム分けの場合
+            if target == 'vc':
+                format_arg = None if format_choice == 'auto' else format_choice
+                await vc_team_divide(pseudo_ctx, format_arg)
+            else:
+                # 全メンバーチーム分けの場合
+                format_arg = None if format_choice == 'auto' else format_choice
+                await team_divide(pseudo_ctx, format_arg)
+                
+        except Exception as e:
+            print(f"チーム分けモーダルエラー: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            await interaction.followup.send(f"❌ チーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
+
 class StatsModal(discord.ui.Modal, title='📊 統計確認'):
     def __init__(self):
         super().__init__()
