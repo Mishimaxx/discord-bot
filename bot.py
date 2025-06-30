@@ -3814,21 +3814,19 @@ class TournamentView(discord.ui.View):
             for item in self.children:
                 item.disabled = True
             
-            # トーナメントが残っている場合はEmbed更新を試行
-            for guild_id, tournament in list(active_tournaments.items()):
-                if tournament.get('status') == 'registration':
-                    try:
-                        # トーナメントメッセージの更新を試行
-                        embed = await create_tournament_embed(tournament, None)
-                        embed.add_field(
-                            name="⏰ タイムアウト", 
-                            value="ボタンの有効期限が切れました。コマンドで操作してください。", 
-                            inline=False
-                        )
-                        # メッセージ更新は context がないため、ログに記録のみ
-                        print(f"TournamentView タイムアウト: guild_id={guild_id}")
-                    except Exception as e:
-                        print(f"TournamentView タイムアウト時のEmbed更新エラー: {e}")
+            # メッセージが存在する場合のみ更新を試行
+            if hasattr(self, 'message') and self.message:
+                try:
+                    embed = discord.Embed(
+                        title="⏰ トーナメント募集タイムアウト",
+                        description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
+                        color=0xffa500
+                    )
+                    await self.message.edit(embed=embed, view=self)
+                except Exception as e:
+                    print(f"TournamentView メッセージ更新エラー: {e}")
+            
+            print(f"TournamentView タイムアウト処理完了")
         except Exception as e:
             print(f"TournamentView タイムアウト処理エラー: {e}")
             
@@ -4347,7 +4345,11 @@ class RankManagementPanel(discord.ui.View):
                 self.send = self._send_wrapper
             
             async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                # viewがNoneの場合は除外して送信
+                if view is None:
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                else:
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4368,7 +4370,11 @@ class RankManagementPanel(discord.ui.View):
                 self.send = self._send_wrapper
             
             async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                # viewがNoneの場合は除外して送信
+                if view is None:
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                else:
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4413,7 +4419,11 @@ class InfoStatsPanel(discord.ui.View):
                 self.send = self._send_wrapper
             
             async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                # viewがNoneの場合は除外して送信
+                if view is None:
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                else:
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4434,7 +4444,11 @@ class InfoStatsPanel(discord.ui.View):
                 self.send = self._send_wrapper
             
             async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                # viewがNoneの場合は除外して送信
+                if view is None:
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                else:
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4455,7 +4469,11 @@ class InfoStatsPanel(discord.ui.View):
                 self.send = self._send_wrapper
             
             async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                # viewがNoneの場合は除外して送信
+                if view is None:
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                else:
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4482,7 +4500,11 @@ class AdminToolsPanel(discord.ui.View):
                 self.send = self._send_wrapper
             
             async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                # viewがNoneの場合は除外して送信
+                if view is None:
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                else:
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4547,7 +4569,11 @@ class TeamDivideModal(discord.ui.Modal, title='🎯 チーム分け設定'):
                     self.send = self._send_wrapper
                 
                 async def _send_wrapper(self, content=None, embed=None, view=None):
-                    await self._interaction.followup.send(content=content, embed=embed, view=view)
+                    # viewがNoneの場合は除外して送信
+                    if view is None:
+                        await self._interaction.followup.send(content=content, embed=embed)
+                    else:
+                        await self._interaction.followup.send(content=content, embed=embed, view=view)
             
             pseudo_ctx = PseudoCtx(interaction)
             
@@ -4564,7 +4590,10 @@ class TeamDivideModal(discord.ui.Modal, title='🎯 チーム分け設定'):
             print(f"チーム分けモーダルエラー: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
-            await interaction.followup.send(f"❌ チーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"❌ チーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
+            except Exception as followup_error:
+                print(f"フォローアップエラー: {followup_error}")
 
 class StatsModal(discord.ui.Modal, title='📊 統計確認'):
     def __init__(self):
@@ -5205,18 +5234,18 @@ class CustomGameView(discord.ui.View):
                 item.disabled = True
             
             # メッセージを更新してタイムアウトを通知
-            embed = discord.Embed(
-                title="⏰ カスタムゲーム募集タイムアウト",
-                description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
-                color=0xffa500
-            )
-            
-            # メッセージを更新（可能な場合のみ）
             if hasattr(self, 'message') and self.message:
                 try:
-                    await self.message.edit(view=self, embed=embed)
-                except:
-                    pass  # メッセージ更新に失敗しても継続
+                    embed = discord.Embed(
+                        title="⏰ カスタムゲーム募集タイムアウト",
+                        description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
+                        color=0xffa500
+                    )
+                    await self.message.edit(embed=embed, view=self)
+                except Exception as e:
+                    print(f"CustomGameView メッセージ更新エラー: {e}")
+            
+            print(f"CustomGameView タイムアウト処理完了")
         except Exception as e:
             print(f"CustomGameView タイムアウト処理エラー: {e}")
             
@@ -5870,18 +5899,18 @@ class RankedRecruitView(discord.ui.View):
                 item.disabled = True
             
             # メッセージを更新してタイムアウトを通知
-            embed = discord.Embed(
-                title="⏰ ランクマッチ募集タイムアウト",
-                description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
-                color=0xffa500
-            )
-            
-            # メッセージを更新（可能な場合のみ）
             if hasattr(self, 'message') and self.message:
                 try:
-                    await self.message.edit(view=self, embed=embed)
-                except:
-                    pass  # メッセージ更新に失敗しても継続
+                    embed = discord.Embed(
+                        title="⏰ ランクマッチ募集タイムアウト",
+                        description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
+                        color=0xffa500
+                    )
+                    await self.message.edit(embed=embed, view=self)
+                except Exception as e:
+                    print(f"RankedRecruitView メッセージ更新エラー: {e}")
+            
+            print(f"RankedRecruitView タイムアウト処理完了")
         except Exception as e:
             print(f"RankedRecruitView タイムアウト処理エラー: {e}")
             
