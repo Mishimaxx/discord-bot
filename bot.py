@@ -4127,7 +4127,8 @@ async def scrim_manager(ctx, action=None, *args):
             
             embed.add_field(
                 name="⚙️ 管理コマンド",
-                value="`!custom kick @ユーザー` - 除外\n"
+                value="`!custom add @ユーザー` - メンバー追加\n"
+                      "`!custom kick @ユーザー` - 除外\n"
                       "`!custom remind` - リマインダー送信\n"
                       "`!custom team` - チーム分け実行\n"
                       "`!custom info` - 詳細情報",
@@ -4161,6 +4162,9 @@ async def scrim_manager(ctx, action=None, *args):
             
         elif action.lower() in ['end', 'close', '終了', '解散']:
             await end_scrim(ctx)
+            
+        elif action.lower() in ['add', 'invite', '追加', '招待']:
+            await add_to_scrim(ctx, args)
             
         elif action.lower() in ['kick', 'remove', '除外']:
             await kick_from_scrim(ctx, args)
@@ -4961,7 +4965,8 @@ async def ranked_recruit_manager(ctx, action=None, *args):
             
             embed.add_field(
                 name="⚙️ 管理コマンド",
-                value="`!ranked kick @ユーザー` - 除外\n"
+                value="`!ranked add @ユーザー` - メンバー追加\n"
+                      "`!ranked kick @ユーザー` - 除外\n"
                       "`!ranked remind` - リマインダー送信\n"
                       "`!ranked team` - ランクバランスチーム分け\n"
                       "`!ranked check` - 参加者ランク確認",
@@ -4996,6 +5001,9 @@ async def ranked_recruit_manager(ctx, action=None, *args):
             
         elif action.lower() in ['end', 'close', '終了', '解散']:
             await end_ranked_recruit(ctx)
+            
+        elif action.lower() in ['add', 'invite', '追加', '招待']:
+            await add_to_ranked_recruit(ctx, args)
             
         elif action.lower() in ['kick', 'remove', '除外']:
             await kick_from_ranked_recruit(ctx, args)
@@ -5416,6 +5424,107 @@ async def end_ranked_recruit(ctx):
     
     await ctx.send(embed=embed)
 
+async def add_to_ranked_recruit(ctx, args):
+    """ランクマッチ募集にユーザーを追加"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    # 権限チェック
+    if ctx.author.id != recruit['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ ランクマッチ募集の作成者または管理者のみメンバーを追加できます。")
+        return
+    
+    if not args:
+        await ctx.send("❌ 追加するユーザーを指定してください。例: `!ranked add @ユーザー`")
+        return
+    
+    # メンションされたユーザーを取得
+    mentioned_users = []
+    for arg in args:
+        if arg.startswith('<@') and arg.endswith('>'):
+            try:
+                user_id = int(arg.strip('<@!>'))
+                member = ctx.guild.get_member(user_id)
+                if member:
+                    mentioned_users.append(member)
+            except ValueError:
+                pass
+    
+    if not mentioned_users:
+        await ctx.send("❌ 有効なユーザーメンションが見つかりません。例: `!ranked add @ユーザー`")
+        return
+    
+    added_users = []
+    already_joined = []
+    max_capacity = []
+    rank_ineligible = []
+    
+    for member in mentioned_users:
+        if member.id in recruit['participants']:
+            already_joined.append(member.display_name)
+        elif len(recruit['participants']) >= recruit['max_players']:
+            max_capacity.append(member.display_name)
+        elif not check_rank_eligibility(member.id, recruit):
+            rank_ineligible.append(member.display_name)
+        else:
+            # 追加処理
+            recruit['participants'].append(member.id)
+            added_users.append(member.display_name)
+            
+            # ステータス更新
+            if len(recruit['participants']) >= recruit['max_players']:
+                recruit['status'] = 'ready'
+    
+    # 結果メッセージ
+    embed = discord.Embed(
+        title="👥 ランクマッチ募集参加者追加",
+        color=0x4a90e2
+    )
+    
+    if added_users:
+        embed.add_field(
+            name="✅ 追加されたメンバー",
+            value="\n".join([f"• {name}" for name in added_users]),
+            inline=False
+        )
+    
+    if already_joined:
+        embed.add_field(
+            name="⚠️ 既に参加済み",
+            value="\n".join([f"• {name}" for name in already_joined]),
+            inline=False
+        )
+    
+    if max_capacity:
+        embed.add_field(
+            name="❌ 満員のため追加不可",
+            value="\n".join([f"• {name}" for name in max_capacity]),
+            inline=False
+        )
+    
+    if rank_ineligible:
+        embed.add_field(
+            name="❌ ランク条件不適合",
+            value="\n".join([f"• {name}" for name in rank_ineligible]) + 
+                  f"\n**条件:** {recruit['rank_requirement']}",
+            inline=False
+        )
+    
+    current_count = len(recruit['participants'])
+    embed.add_field(
+        name="📊 現在の状況",
+        value=f"参加者: {current_count}/{recruit['max_players']}人\n"
+              f"ランク条件: {recruit['rank_requirement']}",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
 async def kick_from_ranked_recruit(ctx, args):
     """ランクマッチ募集からユーザーをキック"""
     channel_id = ctx.channel.id
@@ -5752,6 +5861,95 @@ async def schedule_ranked_recruit_reminder(ctx, recruit_data):
                 
         except ValueError:
             pass  # 時間解析に失敗した場合はスキップ
+
+async def add_to_scrim(ctx, args):
+    """カスタムゲームにユーザーを追加"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    # 権限チェック
+    if ctx.author.id != scrim['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ カスタムゲームの作成者または管理者のみメンバーを追加できます。")
+        return
+    
+    if not args:
+        await ctx.send("❌ 追加するユーザーを指定してください。例: `!custom add @ユーザー`")
+        return
+    
+    # メンションされたユーザーを取得
+    mentioned_users = []
+    for arg in args:
+        if arg.startswith('<@') and arg.endswith('>'):
+            try:
+                user_id = int(arg.strip('<@!>'))
+                member = ctx.guild.get_member(user_id)
+                if member:
+                    mentioned_users.append(member)
+            except ValueError:
+                pass
+    
+    if not mentioned_users:
+        await ctx.send("❌ 有効なユーザーメンションが見つかりません。例: `!custom add @ユーザー`")
+        return
+    
+    added_users = []
+    already_joined = []
+    max_capacity = []
+    
+    for member in mentioned_users:
+        if member.id in scrim['participants']:
+            already_joined.append(member.display_name)
+        elif len(scrim['participants']) >= scrim['max_players']:
+            max_capacity.append(member.display_name)
+        else:
+            # 追加処理
+            scrim['participants'].append(member.id)
+            added_users.append(member.display_name)
+            
+            # ステータス更新
+            if len(scrim['participants']) >= scrim['max_players']:
+                scrim['status'] = 'ready'
+    
+    # 結果メッセージ
+    embed = discord.Embed(
+        title="👥 カスタムゲーム参加者追加",
+        color=0x00ff88
+    )
+    
+    if added_users:
+        embed.add_field(
+            name="✅ 追加されたメンバー",
+            value="\n".join([f"• {name}" for name in added_users]),
+            inline=False
+        )
+    
+    if already_joined:
+        embed.add_field(
+            name="⚠️ 既に参加済み",
+            value="\n".join([f"• {name}" for name in already_joined]),
+            inline=False
+        )
+    
+    if max_capacity:
+        embed.add_field(
+            name="❌ 満員のため追加不可",
+            value="\n".join([f"• {name}" for name in max_capacity]),
+            inline=False
+        )
+    
+    current_count = len(scrim['participants'])
+    embed.add_field(
+        name="📊 現在の状況",
+        value=f"参加者: {current_count}/{scrim['max_players']}人",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
 
 async def kick_from_scrim(ctx, args):
     """カスタムゲームからユーザーをキック"""
