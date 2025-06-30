@@ -602,6 +602,51 @@ async def show_commands(ctx):
         inline=False
     )
     
+    # ゲーム募集コマンド
+    game_recruit_commands = [
+        "!custom create [人数] [時間] - カスタムゲーム募集",
+        "!custom join/leave/status/team/end - 参加/離脱/状況/チーム分け/終了",
+        "!ranked create [ランク帯] [時間] - ランクマッチ募集",
+        "!ranked join/leave/status/team/check - 参加/離脱/状況/チーム分け/ランク確認",
+        "!queue join [ランク]/leave/status - キュー参加/離脱/状況",
+        "!tournament create/join/start/bracket - トーナメント作成/参加/開始/ブラケット"
+    ]
+    
+    embed.add_field(
+        name="⚔️ ゲーム募集・マッチング",
+        value="\n".join(game_recruit_commands),
+        inline=False
+    )
+    
+    # 詳細な使用例とランク機能説明
+    usage_examples = [
+        "**カスタム例:** `!custom create 10人 20:00` - カジュアルゲーム",
+        "**ランク例:** `!ranked create ダイヤ帯 21:00` - ランク条件付き",
+        "**ランク条件:** `プラチナ以上`, `ダイヤ以下`, `any`（問わず）",
+        "**キュー例:** `!queue join current` - 現在ランクで参加",
+        "**トーナメント例:** `!tournament create シングル戦`"
+    ]
+    
+    embed.add_field(
+        name="💡 使用例・ランク機能",
+        value="\n".join(usage_examples),
+        inline=False
+    )
+    
+    # 特殊機能の説明
+    special_features = [
+        "🎯 **ランクバランス:** 自動でバランス調整されたチーム分け",
+        "🔍 **ランクチェック:** 参加時に条件を自動確認",
+        "📊 **統計表示:** 参加者のランク分布とバランス評価",
+        "⏰ **自動リマインダー:** 時間指定で5分前に通知"
+    ]
+    
+    embed.add_field(
+        name="✨ 特殊機能",
+        value="\n".join(special_features),
+        inline=False
+    )
+    
     # Bot管理コマンド
     admin_commands = [
         "!botstatus - Bot状態とパフォーマンス確認",
@@ -3708,6 +3753,2508 @@ async def rank_based_team_divide(ctx, rank_type="current", format_type=None):
         print(f"ランクベースチーム分けエラー: {e}")
         import traceback
         traceback.print_exc()
+
+# ===============================
+# ゲーム管理機能のデータ構造
+# ===============================
+
+# スクリム/カスタムゲーム管理
+active_scrims = {}  # {channel_id: scrim_data}
+scrim_reminders = {}  # {scrim_id: reminder_task}
+
+# ランクマッチ募集管理
+active_rank_recruits = {}  # {channel_id: rank_recruit_data}
+rank_recruit_reminders = {}  # {recruit_id: reminder_task}
+
+# キュー管理（ランク別）
+active_queues = {}  # {guild_id: {rank_range: [user_ids]}}
+queue_notifications = {}  # {user_id: notification_settings}
+
+# トーナメント管理
+active_tournaments = {}  # {guild_id: tournament_data}
+tournament_matches = {}  # {tournament_id: [match_data]}
+
+# ===============================
+# スクリム/カスタムゲーム機能
+# ===============================
+
+@bot.command(name='custom', help='カスタムゲーム募集（例: !custom create 10人 20:00, !custom join, !custom status）')
+@prevent_duplicate_execution
+async def scrim_manager(ctx, action=None, *args):
+    """スクリム/カスタムゲーム管理システム"""
+    try:
+        if not action:
+            # ヘルプ表示
+            embed = discord.Embed(
+                title="🎯 カスタムゲーム機能",
+                description="カスタムゲームの募集・管理システム",
+                color=0x00ff88
+            )
+            
+            embed.add_field(
+                name="📝 基本コマンド",
+                value="`!custom create [人数] [時間]` - 募集開始\n"
+                      "`!custom join` - 参加\n"
+                      "`!custom leave` - 離脱\n"
+                      "`!custom status` - 現在の状況\n"
+                      "`!custom end` - 募集終了",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚙️ 管理コマンド",
+                value="`!custom kick @ユーザー` - 除外\n"
+                      "`!custom remind` - リマインダー送信\n"
+                      "`!custom team` - チーム分け実行\n"
+                      "`!custom info` - 詳細情報",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="💡 使用例",
+                value="`!custom create 10人 20:00` - 10人で20時スタート\n"
+                      "`!custom create 5v5 今から` - 5v5を今すぐ開始",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            return
+        
+        channel_id = ctx.channel.id
+        user = ctx.author
+        
+        if action.lower() in ['create', 'start', '作成', '開始']:
+            await create_scrim(ctx, args)
+            
+        elif action.lower() in ['join', 'j', '参加']:
+            await join_scrim(ctx)
+            
+        elif action.lower() in ['leave', 'l', '離脱']:
+            await leave_scrim(ctx)
+            
+        elif action.lower() in ['status', 's', '状況', '確認']:
+            await show_scrim_status(ctx)
+            
+        elif action.lower() in ['end', 'close', '終了', '解散']:
+            await end_scrim(ctx)
+            
+        elif action.lower() in ['kick', 'remove', '除外']:
+            await kick_from_scrim(ctx, args)
+            
+        elif action.lower() in ['remind', 'reminder', 'リマインド']:
+            await send_scrim_reminder(ctx)
+            
+        elif action.lower() in ['team', 'teams', 'チーム分け']:
+            await scrim_team_divide(ctx)
+            
+        elif action.lower() in ['info', 'detail', '詳細']:
+            await show_scrim_info(ctx)
+            
+        else:
+            await ctx.send("❌ 不明なアクション。`!custom` でヘルプを確認してください。")
+            
+    except Exception as e:
+        await ctx.send(f"❌ スクリム機能でエラーが発生しました: {str(e)}")
+        print(f"スクリム機能エラー: {e}")
+
+async def create_scrim(ctx, args):
+    """スクリム作成"""
+    channel_id = ctx.channel.id
+    
+    # 既存のスクリムチェック
+    if channel_id in active_scrims:
+        await ctx.send("❌ このチャンネルで既にカスタムゲームが進行中です。`!custom end` で終了してください。")
+        return
+    
+    # 引数解析
+    max_players = 10  # デフォルト
+    scheduled_time = "未設定"
+    game_mode = "カスタム"
+    description = ""
+    
+    for arg in args:
+        if '人' in arg or 'v' in arg.lower():
+            # 人数またはフォーマット指定
+            if 'v' in arg.lower():
+                game_mode = arg.upper()
+                if '5v5' in arg.lower():
+                    max_players = 10
+                elif '3v3' in arg.lower():
+                    max_players = 6
+                elif '2v2' in arg.lower():
+                    max_players = 4
+                elif '1v1' in arg.lower():
+                    max_players = 2
+            else:
+                try:
+                    max_players = int(arg.replace('人', ''))
+                except:
+                    pass
+        elif ':' in arg or '時' in arg:
+            # 時間指定
+            scheduled_time = arg
+        elif arg in ['今から', 'now', 'すぐ']:
+            scheduled_time = "今すぐ"
+        else:
+            # 説明文
+            if description:
+                description += f" {arg}"
+            else:
+                description = arg
+    
+    # スクリムデータ作成
+    scrim_data = {
+        'id': f"{channel_id}_{int(datetime.now().timestamp())}",
+        'channel_id': channel_id,
+        'creator': ctx.author,
+        'created_at': datetime.now(),
+        'max_players': max_players,
+        'scheduled_time': scheduled_time,
+        'game_mode': game_mode,
+        'description': description,
+        'participants': [ctx.author.id],
+        'status': 'recruiting',  # recruiting, ready, in_progress, ended
+        'teams': None
+    }
+    
+    active_scrims[channel_id] = scrim_data
+    
+    # 募集メッセージ作成
+    embed = discord.Embed(
+        title="🎯 カスタムゲーム募集開始！",
+        description=f"**{game_mode}** のメンバーを募集中",
+        color=0x00ff88
+    )
+    
+    embed.add_field(
+        name="📊 募集情報",
+        value=f"**最大人数:** {max_players}人\n"
+              f"**開始時間:** {scheduled_time}\n"
+              f"**現在の参加者:** 1/{max_players}人",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者",
+        value=f"• {ctx.author.display_name}",
+        inline=True
+    )
+    
+    if description:
+        embed.add_field(
+            name="📝 詳細",
+            value=description,
+            inline=False
+        )
+    
+    embed.add_field(
+        name="🔧 操作方法",
+        value="`!custom join` - 参加\n`!custom leave` - 離脱\n`!custom status` - 状況確認",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"募集ID: {scrim_data['id'][:8]} | 作成者: {ctx.author.display_name}")
+    
+    message = await ctx.send(embed=embed)
+    scrim_data['message_id'] = message.id
+    
+    # 自動リマインダー設定（開始時間が指定されている場合）
+    if scheduled_time != "未設定" and scheduled_time != "今すぐ":
+        await schedule_scrim_reminder(ctx, scrim_data)
+
+async def join_scrim(ctx):
+    """カスタムゲーム参加"""
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    if user_id in scrim['participants']:
+        await ctx.send("⚠️ 既に参加済みです。")
+        return
+    
+    if len(scrim['participants']) >= scrim['max_players']:
+        await ctx.send("❌ 参加者が満員です。")
+        return
+    
+    # 参加処理
+    scrim['participants'].append(user_id)
+    
+    current_count = len(scrim['participants'])
+    max_players = scrim['max_players']
+    
+    # ステータス更新
+    if current_count >= max_players:
+        scrim['status'] = 'ready'
+    
+    # 参加者リスト作成
+    guild = ctx.guild
+    participants_list = []
+    for participant_id in scrim['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            participants_list.append(f"• {member.display_name}")
+    
+    # 更新メッセージ
+    embed = discord.Embed(
+        title="✅ カスタムゲーム参加完了！" if current_count < max_players else "🎉 カスタムゲーム参加者満員！",
+        color=0x00ff88 if current_count < max_players else 0xffd700
+    )
+    
+    embed.add_field(
+        name="📊 現在の状況",
+        value=f"**参加者:** {current_count}/{max_players}人\n"
+              f"**ゲームモード:** {scrim['game_mode']}\n"
+              f"**開始予定:** {scrim['scheduled_time']}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list),
+        inline=True
+    )
+    
+    if current_count >= max_players:
+        embed.add_field(
+            name="🎯 次のステップ",
+            value="`!custom team` - チーム分け\n`!custom remind` - 全員に通知",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+async def leave_scrim(ctx):
+    """カスタムゲーム離脱"""
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    if user_id not in scrim['participants']:
+        await ctx.send("⚠️ カスタムゲームに参加していません。")
+        return
+    
+    # 作成者の場合は特別処理
+    if user_id == scrim['creator'].id:
+        if len(scrim['participants']) > 1:
+            await ctx.send("⚠️ 作成者は他の参加者がいる間は離脱できません。`!custom end` で募集を終了してください。")
+            return
+    
+    # 離脱処理
+    scrim['participants'].remove(user_id)
+    scrim['status'] = 'recruiting'
+    
+    await ctx.send(f"✅ {ctx.author.display_name} がカスタムゲームから離脱しました。")
+
+async def show_scrim_status(ctx):
+    """カスタムゲーム状況表示"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    # 参加者リスト作成
+    guild = ctx.guild
+    participants_list = []
+    for participant_id in scrim['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            participants_list.append(f"• {member.display_name}")
+    
+    status_map = {
+        'recruiting': '📢 募集中',
+        'ready': '✅ 準備完了',
+        'in_progress': '🎮 進行中',
+        'ended': '🏁 終了'
+    }
+    
+    embed = discord.Embed(
+        title="📊 カスタムゲーム状況",
+        color=0x00ff88
+    )
+    
+    embed.add_field(
+        name="基本情報",
+        value=f"**ステータス:** {status_map.get(scrim['status'], scrim['status'])}\n"
+              f"**ゲームモード:** {scrim['game_mode']}\n"
+              f"**参加者:** {len(scrim['participants'])}/{scrim['max_players']}人\n"
+              f"**開始予定:** {scrim['scheduled_time']}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list) if participants_list else "なし",
+        inline=True
+    )
+    
+    if scrim.get('teams'):
+        embed.add_field(
+            name="🎯 チーム分け",
+            value="チーム分け済み (詳細は `!custom team` で確認)",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"作成者: {scrim['creator'].display_name} | 作成時刻: {scrim['created_at'].strftime('%H:%M')}")
+    
+    await ctx.send(embed=embed)
+
+async def end_scrim(ctx):
+    """カスタムゲーム終了"""
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    # 作成者または管理者のみ終了可能
+    if user_id != scrim['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ カスタムゲームの作成者または管理者のみ終了できます。")
+        return
+    
+    # リマインダーキャンセル
+    scrim_id = scrim['id']
+    if scrim_id in scrim_reminders:
+        scrim_reminders[scrim_id].cancel()
+        del scrim_reminders[scrim_id]
+    
+    # スクリム削除
+    del active_scrims[channel_id]
+    
+    embed = discord.Embed(
+        title="🏁 カスタムゲーム募集終了",
+        description=f"**{scrim['game_mode']}** の募集を終了しました。",
+        color=0xff6b6b
+    )
+    
+    embed.add_field(
+        name="📊 最終統計",
+        value=f"**参加者数:** {len(scrim['participants'])}人\n"
+              f"**募集時間:** {(datetime.now() - scrim['created_at']).seconds // 60}分間",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+# ===============================
+# ランクマッチ募集機能
+# ===============================
+
+@bot.command(name='ranked', aliases=['ランク募集', 'rank_recruit'], help='ランクマッチ募集（例: !ranked create ダイヤ帯 20:00, !ranked join, !ranked status）')
+@prevent_duplicate_execution
+async def ranked_recruit_manager(ctx, action=None, *args):
+    """ランクマッチ募集管理システム"""
+    try:
+        if not action:
+            # ヘルプ表示
+            embed = discord.Embed(
+                title="🏆 ランクマッチ募集機能",
+                description="ランク帯別のマッチング募集システム",
+                color=0x4a90e2
+            )
+            
+            embed.add_field(
+                name="📝 基本コマンド",
+                value="`!ranked create [ランク帯] [時間]` - 募集開始\n"
+                      "`!ranked join` - 参加\n"
+                      "`!ranked leave` - 離脱\n"
+                      "`!ranked status` - 現在の状況\n"
+                      "`!ranked end` - 募集終了",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚙️ 管理コマンド",
+                value="`!ranked kick @ユーザー` - 除外\n"
+                      "`!ranked remind` - リマインダー送信\n"
+                      "`!ranked team` - ランクバランスチーム分け\n"
+                      "`!ranked check` - 参加者ランク確認",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="💡 使用例",
+                value="`!ranked create ダイヤ帯 20:00` - ダイヤ帯で20時スタート\n"
+                      "`!ranked create プラチナ以上 今から` - プラチナ以上で今すぐ\n"
+                      "`!ranked create any 21:30` - ランク問わず21:30",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            return
+        
+        channel_id = ctx.channel.id
+        user = ctx.author
+        
+        if action.lower() in ['create', 'start', '作成', '開始']:
+            await create_ranked_recruit(ctx, args)
+            
+        elif action.lower() in ['join', 'j', '参加']:
+            await join_ranked_recruit(ctx)
+            
+        elif action.lower() in ['leave', 'l', '離脱']:
+            await leave_ranked_recruit(ctx)
+            
+        elif action.lower() in ['status', 's', '状況', '確認']:
+            await show_ranked_recruit_status(ctx)
+            
+        elif action.lower() in ['end', 'close', '終了', '解散']:
+            await end_ranked_recruit(ctx)
+            
+        elif action.lower() in ['kick', 'remove', '除外']:
+            await kick_from_ranked_recruit(ctx, args)
+            
+        elif action.lower() in ['remind', 'reminder', 'リマインド']:
+            await send_ranked_recruit_reminder(ctx)
+            
+        elif action.lower() in ['team', 'teams', 'チーム分け']:
+            await ranked_recruit_team_divide(ctx)
+            
+        elif action.lower() in ['check', 'verify', 'ランク確認']:
+            await check_ranked_recruit_ranks(ctx)
+            
+        else:
+            await ctx.send("❌ 不明なアクション。`!ranked` でヘルプを確認してください。")
+            
+    except Exception as e:
+        await ctx.send(f"❌ ランクマッチ募集機能でエラーが発生しました: {str(e)}")
+        print(f"ランクマッチ募集機能エラー: {e}")
+
+async def create_ranked_recruit(ctx, args):
+    """ランクマッチ募集作成"""
+    channel_id = ctx.channel.id
+    
+    # 既存の募集チェック
+    if channel_id in active_rank_recruits:
+        await ctx.send("❌ このチャンネルで既にランクマッチ募集が進行中です。`!ranked end` で終了してください。")
+        return
+    
+    # 引数解析
+    rank_requirement = "any"  # デフォルト
+    scheduled_time = "未設定"
+    max_players = 5  # デフォルト5人（ランクマッチは5人）
+    description = ""
+    min_rank = None
+    max_rank = None
+    
+    for arg in args:
+        # ランク指定の解析
+        if any(rank_word in arg for rank_word in ['ダイヤ', 'プラチナ', 'ゴールド', 'シルバー', 'ブロンズ', 'アイアン', 'イモータル', 'アセンダント', 'レディアント']):
+            if '以上' in arg:
+                rank_requirement = arg.replace('以上', '').strip() + "以上"
+                min_rank = parse_rank_requirement(arg.replace('以上', '').strip())
+            elif '以下' in arg:
+                rank_requirement = arg.replace('以下', '').strip() + "以下"
+                max_rank = parse_rank_requirement(arg.replace('以下', '').strip())
+            elif '帯' in arg:
+                rank_requirement = arg
+                base_rank = parse_rank_requirement(arg.replace('帯', '').strip())
+                if base_rank:
+                    min_rank, max_rank = get_rank_tier_range(base_rank)
+            else:
+                rank_requirement = arg
+                min_rank = parse_rank_requirement(arg)
+        elif ':' in arg or '時' in arg:
+            # 時間指定
+            scheduled_time = arg
+        elif arg in ['今から', 'now', 'すぐ']:
+            scheduled_time = "今すぐ"
+        elif arg.lower() == 'any':
+            rank_requirement = "ランク問わず"
+        elif arg.isdigit():
+            # 人数指定
+            max_players = min(int(arg), 10)  # 最大10人
+        else:
+            # 説明文
+            if description:
+                description += f" {arg}"
+            else:
+                description = arg
+    
+    # ランクマッチ募集データ作成
+    recruit_data = {
+        'id': f"{channel_id}_{int(datetime.now().timestamp())}",
+        'channel_id': channel_id,
+        'creator': ctx.author,
+        'created_at': datetime.now(),
+        'max_players': max_players,
+        'scheduled_time': scheduled_time,
+        'rank_requirement': rank_requirement,
+        'min_rank': min_rank,
+        'max_rank': max_rank,
+        'description': description,
+        'participants': [ctx.author.id],
+        'status': 'recruiting',  # recruiting, ready, in_progress, ended
+        'teams': None,
+        'type': 'ranked_match'
+    }
+    
+    active_rank_recruits[channel_id] = recruit_data
+    
+    # 募集メッセージ作成
+    embed = discord.Embed(
+        title="🏆 ランクマッチ募集開始！",
+        description=f"**{rank_requirement}** のメンバーを募集中",
+        color=0x4a90e2
+    )
+    
+    embed.add_field(
+        name="📊 募集情報",
+        value=f"**ランク条件:** {rank_requirement}\n"
+              f"**最大人数:** {max_players}人\n"
+              f"**開始時間:** {scheduled_time}\n"
+              f"**現在の参加者:** 1/{max_players}人",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者",
+        value=f"• {ctx.author.display_name}",
+        inline=True
+    )
+    
+    if description:
+        embed.add_field(
+            name="📝 詳細",
+            value=description,
+            inline=False
+        )
+    
+    embed.add_field(
+        name="🔧 操作方法",
+        value="`!ranked join` - 参加\n`!ranked leave` - 離脱\n`!ranked status` - 状況確認",
+        inline=False
+    )
+    
+    # ランク条件の詳細表示
+    if min_rank or max_rank:
+        rank_details = []
+        if min_rank:
+            rank_details.append(f"最低ランク: {VALORANT_RANKS[min_rank]['display']}")
+        if max_rank:
+            rank_details.append(f"最高ランク: {VALORANT_RANKS[max_rank]['display']}")
+        
+        embed.add_field(
+            name="🎯 ランク詳細",
+            value="\n".join(rank_details),
+            inline=False
+        )
+    
+    embed.set_footer(text=f"募集ID: {recruit_data['id'][:8]} | 作成者: {ctx.author.display_name}")
+    
+    message = await ctx.send(embed=embed)
+    recruit_data['message_id'] = message.id
+    
+    # 自動リマインダー設定
+    if scheduled_time != "未設定" and scheduled_time != "今すぐ":
+        await schedule_ranked_recruit_reminder(ctx, recruit_data)
+
+def parse_rank_requirement(rank_text):
+    """ランク要求をパース"""
+    if not rank_text:
+        return None
+    
+    # 既存のparse_rank_input関数を使用
+    return parse_rank_input(rank_text)
+
+def get_rank_tier_range(base_rank):
+    """ランク帯の範囲を取得（例：ダイヤ1-3）"""
+    if not base_rank or base_rank not in VALORANT_RANKS:
+        return None, None
+    
+    base_tier = VALORANT_RANKS[base_rank]['tier']
+    
+    # 同じティアのランクを検索
+    tier_ranks = []
+    for rank_key, rank_info in VALORANT_RANKS.items():
+        if rank_info['tier'] == base_tier:
+            tier_ranks.append((rank_key, rank_info['value']))
+    
+    # 値でソート
+    tier_ranks.sort(key=lambda x: x[1])
+    
+    if tier_ranks:
+        min_rank = tier_ranks[0][0]  # 最低ランク
+        max_rank = tier_ranks[-1][0]  # 最高ランク
+        return min_rank, max_rank
+    
+    return base_rank, base_rank
+
+async def join_ranked_recruit(ctx):
+    """ランクマッチ募集参加"""
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    if user_id in recruit['participants']:
+        await ctx.send("⚠️ 既に参加済みです。")
+        return
+    
+    if len(recruit['participants']) >= recruit['max_players']:
+        await ctx.send("❌ 参加者が満員です。")
+        return
+    
+    # ランク条件チェック
+    if not check_rank_eligibility(user_id, recruit):
+        rank_req = recruit['rank_requirement']
+        await ctx.send(f"❌ ランク条件（{rank_req}）を満たしていません。\n"
+                      f"💡 `!rank set current [ランク]` でランクを設定してください。")
+        return
+    
+    # 参加処理
+    recruit['participants'].append(user_id)
+    
+    current_count = len(recruit['participants'])
+    max_players = recruit['max_players']
+    
+    # ステータス更新
+    if current_count >= max_players:
+        recruit['status'] = 'ready'
+    
+    # 参加者リスト作成
+    guild = ctx.guild
+    participants_list = []
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            # ランク情報を追加
+            rank_info = get_user_rank_display(participant_id)
+            participants_list.append(f"• {member.display_name} {rank_info}")
+    
+    # 更新メッセージ
+    embed = discord.Embed(
+        title="✅ ランクマッチ募集参加完了！" if current_count < max_players else "🎉 ランクマッチ募集参加者満員！",
+        color=0x4a90e2 if current_count < max_players else 0xffd700
+    )
+    
+    embed.add_field(
+        name="📊 現在の状況",
+        value=f"**参加者:** {current_count}/{max_players}人\n"
+              f"**ランク条件:** {recruit['rank_requirement']}\n"
+              f"**開始予定:** {recruit['scheduled_time']}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list),
+        inline=True
+    )
+    
+    if current_count >= max_players:
+        embed.add_field(
+            name="🎯 次のステップ",
+            value="`!ranked team` - ランクバランスチーム分け\n`!ranked remind` - 全員に通知",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+def check_rank_eligibility(user_id, recruit):
+    """ランク条件をチェック"""
+    if recruit['rank_requirement'] in ["any", "ランク問わず"]:
+        return True
+    
+    if user_id not in user_ranks:
+        return False
+    
+    user_rank_data = user_ranks[user_id]
+    current_rank = user_rank_data.get('current')
+    
+    if not current_rank:
+        return False
+    
+    user_rank_value = VALORANT_RANKS[current_rank]['value']
+    
+    # 最低ランクチェック
+    if recruit['min_rank']:
+        min_value = VALORANT_RANKS[recruit['min_rank']]['value']
+        if user_rank_value < min_value:
+            return False
+    
+    # 最高ランクチェック
+    if recruit['max_rank']:
+        max_value = VALORANT_RANKS[recruit['max_rank']]['value']
+        if user_rank_value > max_value:
+            return False
+    
+    return True
+
+def get_user_rank_display(user_id):
+    """ユーザーのランク表示を取得"""
+    if user_id not in user_ranks:
+        return "(ランク未設定)"
+    
+    user_rank_data = user_ranks[user_id]
+    current_rank = user_rank_data.get('current')
+    
+    if not current_rank:
+        return "(ランク未設定)"
+    
+    return f"({VALORANT_RANKS[current_rank]['display']})"
+
+async def leave_ranked_recruit(ctx):
+    """ランクマッチ募集離脱"""
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    if user_id not in recruit['participants']:
+        await ctx.send("⚠️ ランクマッチ募集に参加していません。")
+        return
+    
+    # 作成者の場合は特別処理
+    if user_id == recruit['creator'].id:
+        if len(recruit['participants']) > 1:
+            await ctx.send("⚠️ 作成者は他の参加者がいる間は離脱できません。`!ranked end` で募集を終了してください。")
+            return
+    
+    # 離脱処理
+    recruit['participants'].remove(user_id)
+    recruit['status'] = 'recruiting'
+    
+    await ctx.send(f"✅ {ctx.author.display_name} がランクマッチ募集から離脱しました。")
+
+async def show_ranked_recruit_status(ctx):
+    """ランクマッチ募集状況表示"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    # 参加者リスト作成（ランク情報付き）
+    guild = ctx.guild
+    participants_list = []
+    rank_stats = {}
+    
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            rank_info = get_user_rank_display(participant_id)
+            participants_list.append(f"• {member.display_name} {rank_info}")
+            
+            # ランク統計
+            if participant_id in user_ranks and user_ranks[participant_id].get('current'):
+                rank = user_ranks[participant_id]['current']
+                tier = VALORANT_RANKS[rank]['tier']
+                rank_stats[tier] = rank_stats.get(tier, 0) + 1
+    
+    status_map = {
+        'recruiting': '📢 募集中',
+        'ready': '✅ 準備完了',
+        'in_progress': '🎮 進行中',
+        'ended': '🏁 終了'
+    }
+    
+    embed = discord.Embed(
+        title="📊 ランクマッチ募集状況",
+        color=0x4a90e2
+    )
+    
+    embed.add_field(
+        name="基本情報",
+        value=f"**ステータス:** {status_map.get(recruit['status'], recruit['status'])}\n"
+              f"**ランク条件:** {recruit['rank_requirement']}\n"
+              f"**参加者:** {len(recruit['participants'])}/{recruit['max_players']}人\n"
+              f"**開始予定:** {recruit['scheduled_time']}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list) if participants_list else "なし",
+        inline=True
+    )
+    
+    # ランク分布
+    if rank_stats:
+        tier_names = {9: "レディアント", 8: "イモータル", 7: "アセンダント", 6: "ダイヤ", 5: "プラチナ", 4: "ゴールド", 3: "シルバー", 2: "ブロンズ", 1: "アイアン"}
+        rank_distribution = []
+        for tier in sorted(rank_stats.keys(), reverse=True):
+            tier_name = tier_names.get(tier, f"ティア{tier}")
+            rank_distribution.append(f"{tier_name}: {rank_stats[tier]}人")
+        
+        embed.add_field(
+            name="🏆 ランク分布",
+            value="\n".join(rank_distribution),
+            inline=False
+        )
+    
+    if recruit.get('teams'):
+        embed.add_field(
+            name="🎯 チーム分け",
+            value="チーム分け済み (詳細は `!ranked team` で確認)",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"作成者: {recruit['creator'].display_name} | 作成時刻: {recruit['created_at'].strftime('%H:%M')}")
+    
+    await ctx.send(embed=embed)
+
+async def end_ranked_recruit(ctx):
+    """ランクマッチ募集終了"""
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    # 作成者または管理者のみ終了可能
+    if user_id != recruit['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ ランクマッチ募集の作成者または管理者のみ終了できます。")
+        return
+    
+    # リマインダーキャンセル
+    recruit_id = recruit['id']
+    if recruit_id in rank_recruit_reminders:
+        rank_recruit_reminders[recruit_id].cancel()
+        del rank_recruit_reminders[recruit_id]
+    
+    # 募集削除
+    del active_rank_recruits[channel_id]
+    
+    embed = discord.Embed(
+        title="🏁 ランクマッチ募集終了",
+        description=f"**{recruit['rank_requirement']}** の募集を終了しました。",
+        color=0xff6b6b
+    )
+    
+    embed.add_field(
+        name="📊 最終統計",
+        value=f"**参加者数:** {len(recruit['participants'])}人\n"
+              f"**募集時間:** {(datetime.now() - recruit['created_at']).seconds // 60}分間",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+async def kick_from_ranked_recruit(ctx, args):
+    """ランクマッチ募集からユーザーをキック"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    # 権限チェック
+    if ctx.author.id != recruit['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ ランクマッチ募集の作成者または管理者のみキックできます。")
+        return
+    
+    if not args:
+        await ctx.send("❌ キックするユーザーを指定してください。例: `!ranked kick @ユーザー`")
+        return
+    
+    # メンションされたユーザーを取得
+    if ctx.message.mentions:
+        target_user = ctx.message.mentions[0]
+        if target_user.id in recruit['participants']:
+            recruit['participants'].remove(target_user.id)
+            recruit['status'] = 'recruiting'
+            await ctx.send(f"✅ {target_user.display_name} をランクマッチ募集からキックしました。")
+        else:
+            await ctx.send("❌ そのユーザーはランクマッチ募集に参加していません。")
+    else:
+        await ctx.send("❌ 有効なユーザーメンションが見つかりません。")
+
+async def send_ranked_recruit_reminder(ctx):
+    """ランクマッチ募集リマインダー送信"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    # 権限チェック
+    if ctx.author.id != recruit['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ ランクマッチ募集の作成者または管理者のみリマインダーを送信できます。")
+        return
+    
+    # 参加者にメンション
+    guild = ctx.guild
+    mentions = []
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            mentions.append(member.mention)
+    
+    embed = discord.Embed(
+        title="🔔 ランクマッチ募集リマインダー",
+        description=f"**{recruit['rank_requirement']}** の時間です！",
+        color=0xffaa00
+    )
+    
+    embed.add_field(
+        name="📊 情報",
+        value=f"**参加者:** {len(recruit['participants'])}/{recruit['max_players']}人\n"
+              f"**開始予定:** {recruit['scheduled_time']}\n"
+              f"**ランク条件:** {recruit['rank_requirement']}",
+        inline=False
+    )
+    
+    if len(recruit['participants']) >= recruit['max_players']:
+        embed.add_field(
+            name="🎯 準備完了",
+            value="参加者が揃いました！ランクマッチを開始してください。",
+            inline=False
+        )
+    
+    mention_text = " ".join(mentions) if mentions else "参加者なし"
+    await ctx.send(f"{mention_text}\n", embed=embed)
+
+async def ranked_recruit_team_divide(ctx):
+    """ランクマッチ募集でランクバランスチーム分け実行"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    if len(recruit['participants']) < 2:
+        await ctx.send("❌ チーム分けには最低2人必要です。")
+        return
+    
+    guild = ctx.guild
+    members = []
+    ranked_members = []
+    
+    # 参加者のランク情報を取得
+    total_rank_value = 0
+    rank_count = 0
+    
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            members.append(member)
+            
+            # ランク情報取得
+            if participant_id in user_ranks and user_ranks[participant_id].get('current'):
+                rank_name = user_ranks[participant_id]['current']
+                rank_value = VALORANT_RANKS[rank_name]['value']
+                ranked_members.append({
+                    'member': member,
+                    'rank': rank_name,
+                    'value': rank_value
+                })
+                total_rank_value += rank_value
+                rank_count += 1
+            else:
+                # ランク未設定者は平均ランクで計算
+                ranked_members.append({
+                    'member': member,
+                    'rank': None,
+                    'value': 400  # ゴールド1レベル
+                })
+    
+    # 平均ランク値を計算
+    if rank_count > 0:
+        avg_rank_value = total_rank_value / rank_count
+    else:
+        avg_rank_value = 400
+    
+    # 未ランクメンバーに平均値を適用
+    for member_data in ranked_members:
+        if member_data['rank'] is None:
+            member_data['value'] = avg_rank_value
+    
+    # ランクバランス調整チーム分け
+    def balance_teams_by_rank(members_data, team_size):
+        """ランク値の合計ができるだけ均等になるようにチーム分け"""
+        members_data = sorted(members_data, key=lambda x: x['value'], reverse=True)
+        team1 = []
+        team2 = []
+        
+        for member_data in members_data:
+            # 現在のチーム合計値を計算
+            team1_total = sum(m['value'] for m in team1)
+            team2_total = sum(m['value'] for m in team2)
+            
+            # チームサイズ制限もチェック
+            if len(team1) >= team_size:
+                team2.append(member_data)
+            elif len(team2) >= team_size:
+                team1.append(member_data)
+            else:
+                # より合計値が低いチームに追加
+                if team1_total <= team2_total:
+                    team1.append(member_data)
+                else:
+                    team2.append(member_data)
+        
+        return team1, team2
+    
+    # チーム分けの実行
+    team_size = len(ranked_members) // 2
+    team1, team2 = balance_teams_by_rank(ranked_members, team_size)
+    
+    # チーム情報を保存
+    recruit['teams'] = {
+        'team1': [m['member'].id for m in team1],
+        'team2': [m['member'].id for m in team2]
+    }
+    
+    embed = discord.Embed(
+        title="🎯 ランクマッチ チーム分け結果",
+        description="ランクバランスを考慮したチーム分け",
+        color=0x4a90e2
+    )
+    
+    # チーム1の情報
+    team1_display = []
+    team1_total = 0
+    for member_data in team1:
+        member = member_data['member']
+        rank = member_data['rank']
+        value = member_data['value']
+        team1_total += value
+        
+        if rank:
+            rank_info = VALORANT_RANKS[rank]
+            team1_display.append(f"• {member.display_name} ({rank_info['display']})")
+        else:
+            team1_display.append(f"• {member.display_name} (ランク未設定)")
+    
+    embed.add_field(
+        name="🔴 チーム1",
+        value="\n".join(team1_display),
+        inline=True
+    )
+    
+    # チーム2の情報
+    team2_display = []
+    team2_total = 0
+    for member_data in team2:
+        member = member_data['member']
+        rank = member_data['rank']
+        value = member_data['value']
+        team2_total += value
+        
+        if rank:
+            rank_info = VALORANT_RANKS[rank]
+            team2_display.append(f"• {member.display_name} ({rank_info['display']})")
+        else:
+            team2_display.append(f"• {member.display_name} (ランク未設定)")
+    
+    embed.add_field(
+        name="🔵 チーム2",
+        value="\n".join(team2_display),
+        inline=True
+    )
+    
+    # バランス情報
+    avg1 = team1_total / len(team1) if team1 else 0
+    avg2 = team2_total / len(team2) if team2 else 0
+    balance_diff = abs(avg1 - avg2)
+    balance_quality = "完璧" if balance_diff < 50 else "良好" if balance_diff < 100 else "やや偏り" if balance_diff < 150 else "偏りあり"
+    
+    embed.add_field(
+        name="⚖️ バランス評価",
+        value=f"{balance_quality} (差: {balance_diff:.0f})",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📊 平均ランク値",
+        value=f"チーム1: {avg1:.0f} | チーム2: {avg2:.0f}",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"ランク条件: {recruit['rank_requirement']} | 頑張って！")
+    
+    await ctx.send(embed=embed)
+
+async def check_ranked_recruit_ranks(ctx):
+    """ランクマッチ募集参加者のランク確認"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_rank_recruits:
+        await ctx.send("❌ このチャンネルにアクティブなランクマッチ募集がありません。")
+        return
+    
+    recruit = active_rank_recruits[channel_id]
+    
+    guild = ctx.guild
+    rank_check_results = []
+    eligible_count = 0
+    ineligible_count = 0
+    
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            # ランク適格性チェック
+            is_eligible = check_rank_eligibility(participant_id, recruit)
+            rank_display = get_user_rank_display(participant_id)
+            
+            if is_eligible:
+                status = "✅"
+                eligible_count += 1
+            else:
+                status = "❌"
+                ineligible_count += 1
+            
+            rank_check_results.append(f"{status} {member.display_name} {rank_display}")
+    
+    embed = discord.Embed(
+        title="🔍 参加者ランク確認",
+        color=0x00ff88 if ineligible_count == 0 else 0xff6b6b
+    )
+    
+    embed.add_field(
+        name="📊 確認結果",
+        value=f"**適格者:** {eligible_count}人\n"
+              f"**不適格者:** {ineligible_count}人\n"
+              f"**ランク条件:** {recruit['rank_requirement']}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 詳細結果",
+        value="\n".join(rank_check_results) if rank_check_results else "参加者なし",
+        inline=False
+    )
+    
+    if ineligible_count > 0:
+        embed.add_field(
+            name="⚠️ 注意",
+            value="ランク条件を満たしていない参加者がいます。\n"
+                  "適切にランクを設定するか、募集から除外してください。",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+async def schedule_ranked_recruit_reminder(ctx, recruit_data):
+    """ランクマッチ募集リマインダーのスケジュール設定"""
+    # 簡単な時間解析（scrimと同じロジック）
+    scheduled_time = recruit_data['scheduled_time']
+    
+    # "20:00" 形式の解析
+    if ':' in scheduled_time:
+        try:
+            time_parts = scheduled_time.split(':')
+            target_hour = int(time_parts[0])
+            target_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+            
+            now = datetime.now()
+            target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+            
+            # 過去の時間の場合は翌日に設定
+            if target_time <= now:
+                target_time += timedelta(days=1)
+            
+            # リマインダータスク作成
+            delay = (target_time - now).total_seconds() - 300  # 5分前に通知
+            
+            if delay > 0:
+                async def reminder_task():
+                    await asyncio.sleep(delay)
+                    if recruit_data['id'] in rank_recruit_reminders:
+                        channel = bot.get_channel(ctx.channel.id)
+                        if channel:
+                            await channel.send(f"🔔 **リマインダー**: 5分後にランクマッチ開始予定です！")
+                
+                task = asyncio.create_task(reminder_task())
+                rank_recruit_reminders[recruit_data['id']] = task
+                
+        except ValueError:
+            pass  # 時間解析に失敗した場合はスキップ
+
+async def kick_from_scrim(ctx, args):
+    """カスタムゲームからユーザーをキック"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    # 権限チェック
+    if ctx.author.id != scrim['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ カスタムゲームの作成者または管理者のみキックできます。")
+        return
+    
+    if not args:
+        await ctx.send("❌ キックするユーザーを指定してください。例: `!custom kick @ユーザー`")
+        return
+    
+    # メンションされたユーザーを取得
+    if ctx.message.mentions:
+        target_user = ctx.message.mentions[0]
+        if target_user.id in scrim['participants']:
+            scrim['participants'].remove(target_user.id)
+            scrim['status'] = 'recruiting'
+            await ctx.send(f"✅ {target_user.display_name} をカスタムゲームからキックしました。")
+        else:
+            await ctx.send("❌ そのユーザーはカスタムゲームに参加していません。")
+    else:
+        await ctx.send("❌ 有効なユーザーメンションが見つかりません。")
+
+async def send_scrim_reminder(ctx):
+    """カスタムゲームリマインダー送信"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    # 権限チェック
+    if ctx.author.id != scrim['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ カスタムゲームの作成者または管理者のみリマインダーを送信できます。")
+        return
+    
+    # 参加者にメンション
+    guild = ctx.guild
+    mentions = []
+    for participant_id in scrim['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            mentions.append(member.mention)
+    
+    embed = discord.Embed(
+        title="🔔 カスタムゲームリマインダー",
+        description=f"**{scrim['game_mode']}** の時間です！",
+        color=0xffaa00
+    )
+    
+    embed.add_field(
+        name="📊 情報",
+        value=f"**参加者:** {len(scrim['participants'])}/{scrim['max_players']}人\n"
+              f"**開始予定:** {scrim['scheduled_time']}",
+        inline=False
+    )
+    
+    if len(scrim['participants']) >= scrim['max_players']:
+        embed.add_field(
+            name="🎯 準備完了",
+            value="参加者が揃いました！ゲームを開始してください。",
+            inline=False
+        )
+    
+    mention_text = " ".join(mentions) if mentions else "参加者なし"
+    await ctx.send(f"{mention_text}\n", embed=embed)
+
+async def scrim_team_divide(ctx):
+    """カスタムゲームでチーム分け実行"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    if len(scrim['participants']) < 2:
+        await ctx.send("❌ チーム分けには最低2人必要です。")
+        return
+    
+    guild = ctx.guild
+    members = []
+    for participant_id in scrim['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            members.append(member)
+    
+    # チーム分けロジック
+    random.shuffle(members)
+    
+    if scrim['game_mode'] in ['5v5', '5V5']:
+        team_size = 5
+    elif scrim['game_mode'] in ['3v3', '3V3']:
+        team_size = 3
+    elif scrim['game_mode'] in ['2v2', '2V2']:
+        team_size = 2
+    else:
+        team_size = len(members) // 2
+    
+    team1 = members[:team_size]
+    team2 = members[team_size:team_size*2]
+    extras = members[team_size*2:] if len(members) > team_size*2 else []
+    
+    # チーム情報を保存
+    scrim['teams'] = {
+        'team1': [m.id for m in team1],
+        'team2': [m.id for m in team2],
+        'extras': [m.id for m in extras]
+    }
+    
+    embed = discord.Embed(
+        title="🎯 カスタムゲームチーム分け結果",
+        color=0x00ff88
+    )
+    
+    embed.add_field(
+        name="🔴 チーム1",
+        value="\n".join([f"• {m.display_name}" for m in team1]),
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🔵 チーム2",
+        value="\n".join([f"• {m.display_name}" for m in team2]),
+        inline=True
+    )
+    
+    if extras:
+        embed.add_field(
+            name="⚪ 待機",
+            value="\n".join([f"• {m.display_name}" for m in extras]),
+            inline=False
+        )
+    
+    embed.set_footer(text=f"ゲームモード: {scrim['game_mode']} | 頑張って！")
+    
+    await ctx.send(embed=embed)
+
+async def show_scrim_info(ctx):
+    """カスタムゲーム詳細情報表示"""
+    channel_id = ctx.channel.id
+    
+    if channel_id not in active_scrims:
+        await ctx.send("❌ このチャンネルにアクティブなカスタムゲームがありません。")
+        return
+    
+    scrim = active_scrims[channel_id]
+    
+    embed = discord.Embed(
+        title="📋 カスタムゲーム詳細情報",
+        color=0x00aaff
+    )
+    
+    embed.add_field(
+        name="基本情報",
+        value=f"**ID:** {scrim['id'][:8]}\n"
+              f"**作成者:** {scrim['creator'].display_name}\n"
+              f"**作成時刻:** {scrim['created_at'].strftime('%m/%d %H:%M')}\n"
+              f"**ゲームモード:** {scrim['game_mode']}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="募集状況",
+        value=f"**最大人数:** {scrim['max_players']}人\n"
+              f"**現在:** {len(scrim['participants'])}人\n"
+              f"**開始予定:** {scrim['scheduled_time']}\n"
+              f"**ステータス:** {scrim['status']}",
+        inline=True
+    )
+    
+    if scrim.get('description'):
+        embed.add_field(
+            name="📝 説明",
+            value=scrim['description'],
+            inline=False
+        )
+    
+    if scrim.get('teams'):
+        embed.add_field(
+            name="🎯 チーム状況",
+            value="チーム分け完了済み",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+async def schedule_scrim_reminder(ctx, scrim_data):
+    """スクリムリマインダーのスケジュール設定"""
+    # 簡単な時間解析（実装は基本的なもの）
+    scheduled_time = scrim_data['scheduled_time']
+    
+    # "20:00" 形式の解析
+    if ':' in scheduled_time:
+        try:
+            time_parts = scheduled_time.split(':')
+            target_hour = int(time_parts[0])
+            target_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+            
+            now = datetime.now()
+            target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+            
+            # 過去の時間の場合は翌日に設定
+            if target_time <= now:
+                target_time += timedelta(days=1)
+            
+            # リマインダータスク作成
+            delay = (target_time - now).total_seconds() - 300  # 5分前に通知
+            
+            if delay > 0:
+                async def reminder_task():
+                    await asyncio.sleep(delay)
+                    if scrim_data['id'] in scrim_reminders:
+                        channel = bot.get_channel(ctx.channel.id)
+                        if channel:
+                            await channel.send(f"🔔 **リマインダー**: 5分後にカスタムゲーム開始予定です！")
+                
+                task = asyncio.create_task(reminder_task())
+                scrim_reminders[scrim_data['id']] = task
+                
+        except ValueError:
+            pass  # 時間解析に失敗した場合はスキップ
+
+# ===============================
+# キュー管理機能
+# ===============================
+
+@bot.command(name='queue', aliases=['q'], help='ランクマッチキュー管理（例: !queue join ダイヤ, !queue status, !queue match）')
+@prevent_duplicate_execution
+async def queue_manager(ctx, action=None, *args):
+    """ランクマッチキュー管理システム"""
+    try:
+        if not action:
+            # ヘルプ表示
+            embed = discord.Embed(
+                title="🎮 ランクマッチキュー",
+                description="同じランク帯でのマッチング支援システム",
+                color=0xff6b6b
+            )
+            
+            embed.add_field(
+                name="📝 基本コマンド",
+                value="`!queue join [ランク]` - キュー参加\n"
+                      "`!queue leave` - キュー離脱\n"
+                      "`!queue status` - キュー状況\n"
+                      "`!queue match` - マッチング実行",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🏆 ランク指定例",
+                value="`!queue join ダイヤ` - ダイヤ帯でキュー\n"
+                      "`!queue join current` - 現在ランクでキュー\n"
+                      "`!queue join any` - 全ランク対象",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="💡 機能",
+                value="• 同ランク帯での自動マッチング\n"
+                      "• キュー時間の表示\n"
+                      "• グループ作成支援",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            return
+        
+        guild_id = ctx.guild.id
+        user_id = ctx.author.id
+        
+        if action.lower() in ['join', 'j', '参加']:
+            await join_queue(ctx, args)
+            
+        elif action.lower() in ['leave', 'l', '離脱']:
+            await leave_queue(ctx)
+            
+        elif action.lower() in ['status', 's', '状況']:
+            await show_queue_status(ctx)
+            
+        elif action.lower() in ['match', 'm', 'マッチング']:
+            await execute_queue_matching(ctx)
+            
+        elif action.lower() in ['clear', 'reset', 'クリア']:
+            await clear_queue(ctx)
+            
+        else:
+            await ctx.send("❌ 不明なアクション。`!queue` でヘルプを確認してください。")
+            
+    except Exception as e:
+        await ctx.send(f"❌ キュー機能でエラーが発生しました: {str(e)}")
+        print(f"キュー機能エラー: {e}")
+
+async def join_queue(ctx, args):
+    """キュー参加"""
+    guild_id = ctx.guild.id
+    user_id = ctx.author.id
+    
+    # ランク指定の解析
+    rank_filter = "any"
+    if args:
+        rank_input = " ".join(args)
+        if rank_input.lower() == "current":
+            # 現在ランクを使用
+            if user_id in user_ranks and user_ranks[user_id].get('current'):
+                rank_filter = user_ranks[user_id]['current']
+            else:
+                await ctx.send("❌ 現在ランクが設定されていません。`!rank set current [ランク]` で設定してください。")
+                return
+        elif rank_input.lower() != "any":
+            # 指定ランクを解析
+            parsed_rank = parse_rank_input([rank_input])
+            if parsed_rank:
+                rank_filter = parsed_rank
+            else:
+                await ctx.send("❌ 無効なランクです。`!ranklist` で利用可能なランクを確認してください。")
+                return
+    
+    # キューデータ初期化
+    if guild_id not in active_queues:
+        active_queues[guild_id] = {}
+    
+    if rank_filter not in active_queues[guild_id]:
+        active_queues[guild_id][rank_filter] = []
+    
+    # 既に参加チェック
+    queue_list = active_queues[guild_id][rank_filter]
+    
+    # 他のランク帯に参加していないかチェック
+    for rank_key, users in active_queues[guild_id].items():
+        if user_id in [u['user_id'] for u in users]:
+            if rank_key == rank_filter:
+                await ctx.send("⚠️ 既にこのランク帯のキューに参加しています。")
+                return
+            else:
+                await ctx.send(f"❌ 他のランク帯（{rank_key}）のキューに参加中です。先に離脱してください。")
+                return
+    
+    # キュー参加
+    queue_entry = {
+        'user_id': user_id,
+        'user': ctx.author,
+        'joined_at': datetime.now(),
+        'rank': rank_filter
+    }
+    
+    queue_list.append(queue_entry)
+    
+    # ランク表示名を取得
+    if rank_filter == "any":
+        rank_display = "全ランク"
+    elif rank_filter in VALORANT_RANKS:
+        rank_display = VALORANT_RANKS[rank_filter]['display']
+    else:
+        rank_display = rank_filter
+    
+    embed = discord.Embed(
+        title="✅ キュー参加完了",
+        color=0x00ff88
+    )
+    
+    embed.add_field(
+        name="📊 キュー情報",
+        value=f"**ランク帯:** {rank_display}\n"
+              f"**キュー内人数:** {len(queue_list)}人\n"
+              f"**待機時間:** 0分",
+        inline=True
+    )
+    
+    # マッチング可能かチェック
+    if len(queue_list) >= 5:
+        embed.add_field(
+            name="🎯 マッチング可能",
+            value=f"5人以上揃いました！\n`!queue match` でマッチング実行",
+            inline=False
+        )
+        embed.color = 0xffd700
+    
+    await ctx.send(embed=embed)
+
+async def leave_queue(ctx):
+    """キュー離脱"""
+    guild_id = ctx.guild.id
+    user_id = ctx.author.id
+    
+    if guild_id not in active_queues:
+        await ctx.send("❌ アクティブなキューがありません。")
+        return
+    
+    # ユーザーが参加しているキューを検索
+    found_queue = None
+    found_rank = None
+    
+    for rank_key, users in active_queues[guild_id].items():
+        for i, user_data in enumerate(users):
+            if user_data['user_id'] == user_id:
+                found_queue = users
+                found_rank = rank_key
+                users.pop(i)
+                break
+        if found_queue:
+            break
+    
+    if not found_queue:
+        await ctx.send("❌ キューに参加していません。")
+        return
+    
+    await ctx.send(f"✅ {found_rank} ランク帯のキューから離脱しました。")
+
+async def show_queue_status(ctx):
+    """キュー状況表示"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_queues or not active_queues[guild_id]:
+        await ctx.send("❌ アクティブなキューがありません。")
+        return
+    
+    embed = discord.Embed(
+        title="🎮 キュー状況",
+        color=0xff6b6b
+    )
+    
+    total_users = 0
+    
+    for rank_key, users in active_queues[guild_id].items():
+        if not users:
+            continue
+        
+        # ランク表示名
+        if rank_key == "any":
+            rank_display = "全ランク"
+        elif rank_key in VALORANT_RANKS:
+            rank_display = VALORANT_RANKS[rank_key]['display']
+        else:
+            rank_display = rank_key
+        
+        # ユーザーリスト作成
+        user_list = []
+        for user_data in users:
+            wait_time = (datetime.now() - user_data['joined_at']).seconds // 60
+            user_list.append(f"• {user_data['user'].display_name} ({wait_time}分)")
+        
+        embed.add_field(
+            name=f"🏆 {rank_display} ({len(users)}人)",
+            value="\n".join(user_list) if user_list else "なし",
+            inline=True
+        )
+        
+        total_users += len(users)
+    
+    embed.add_field(
+        name="📊 統計",
+        value=f"**合計待機中:** {total_users}人\n"
+              f"**ランク帯数:** {len([k for k, v in active_queues[guild_id].items() if v])}",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+async def execute_queue_matching(ctx):
+    """マッチング実行"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_queues:
+        await ctx.send("❌ アクティブなキューがありません。")
+        return
+    
+    matches_found = []
+    
+    for rank_key, users in active_queues[guild_id].items():
+        if len(users) >= 5:
+            # 5人以上いる場合はマッチング実行
+            matched_users = users[:5]  # 最初の5人
+            remaining_users = users[5:]  # 残り
+            
+            # マッチング情報作成
+            match_data = {
+                'rank': rank_key,
+                'users': matched_users,
+                'created_at': datetime.now()
+            }
+            matches_found.append(match_data)
+            
+            # キューから削除
+            active_queues[guild_id][rank_key] = remaining_users
+    
+    if not matches_found:
+        await ctx.send("❌ マッチング可能なキューがありません。（各ランク帯に5人以上必要）")
+        return
+    
+    # マッチング結果表示
+    for match in matches_found:
+        rank_key = match['rank']
+        users = match['users']
+        
+        # ランク表示名
+        if rank_key == "any":
+            rank_display = "全ランク"
+        elif rank_key in VALORANT_RANKS:
+            rank_display = VALORANT_RANKS[rank_key]['display']
+        else:
+            rank_display = rank_key
+        
+        embed = discord.Embed(
+            title="🎯 マッチング成功！",
+            description=f"**{rank_display}** でマッチングが成立しました",
+            color=0x00ff88
+        )
+        
+        # チーム分け
+        random.shuffle(users)
+        team1 = users[:3] if len(users) >= 3 else users[:2]
+        team2 = users[3:] if len(users) >= 5 else users[2:] if len(users) >= 4 else []
+        
+        embed.add_field(
+            name="🔴 チーム1",
+            value="\n".join([f"• {u['user'].display_name}" for u in team1]),
+            inline=True
+        )
+        
+        if team2:
+            embed.add_field(
+                name="🔵 チーム2",
+                value="\n".join([f"• {u['user'].display_name}" for u in team2]),
+                inline=True
+            )
+        
+        # メンション作成
+        mentions = [u['user'].mention for u in users]
+        
+        embed.set_footer(text=f"ランク帯: {rank_display} | 頑張って！")
+        
+        await ctx.send(" ".join(mentions), embed=embed)
+
+async def clear_queue(ctx):
+    """キュークリア（管理者用）"""
+    if not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ この機能は管理者のみ使用できます。")
+        return
+    
+    guild_id = ctx.guild.id
+    
+    if guild_id in active_queues:
+        active_queues[guild_id] = {}
+        await ctx.send("✅ 全てのキューをクリアしました。")
+    else:
+        await ctx.send("❌ アクティブなキューがありません。")
+
+# ===============================
+# トーナメント機能
+# ===============================
+
+@bot.command(name='tournament', aliases=['tourney'], help='ミニトーナメント開催（例: !tournament create シングル戦, !tournament join, !tournament bracket）')
+@prevent_duplicate_execution
+async def tournament_manager(ctx, action=None, *args):
+    """ミニトーナメント管理システム"""
+    try:
+        if not action:
+            # ヘルプ表示
+            embed = discord.Embed(
+                title="🏆 トーナメント機能",
+                description="ミニトーナメント開催・管理システム",
+                color=0xffd700
+            )
+            
+            embed.add_field(
+                name="📝 基本コマンド",
+                value="`!tournament create [形式]` - トーナメント作成\n"
+                      "`!tournament join` - 参加登録\n"
+                      "`!tournament leave` - 参加取消\n"
+                      "`!tournament start` - 開始\n"
+                      "`!tournament bracket` - ブラケット表示",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚔️ 試合管理",
+                value="`!tournament result [勝者]` - 結果入力\n"
+                      "`!tournament next` - 次の試合\n"
+                      "`!tournament status` - 進行状況\n"
+                      "`!tournament end` - 終了",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🎯 形式例",
+                value="`!tournament create シングル戦` - シングル戦\n"
+                      "`!tournament create ダブル戦` - ダブル戦\n"
+                      "`!tournament create チーム戦` - チーム戦",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            return
+        
+        guild_id = ctx.guild.id
+        
+        if action.lower() in ['create', 'new', '作成']:
+            await create_tournament(ctx, args)
+            
+        elif action.lower() in ['join', 'j', '参加']:
+            await join_tournament(ctx)
+            
+        elif action.lower() in ['leave', 'l', '離脱']:
+            await leave_tournament(ctx)
+            
+        elif action.lower() in ['start', 'begin', '開始']:
+            await start_tournament(ctx)
+            
+        elif action.lower() in ['bracket', 'br', 'ブラケット']:
+            await show_tournament_bracket(ctx)
+            
+        elif action.lower() in ['status', 's', '状況']:
+            await show_tournament_status(ctx)
+            
+        elif action.lower() in ['result', 'res', '結果']:
+            await input_match_result(ctx, args)
+            
+        elif action.lower() in ['next', 'n', '次']:
+            await show_next_matches(ctx)
+            
+        elif action.lower() in ['end', 'finish', '終了']:
+            await end_tournament(ctx)
+            
+        else:
+            await ctx.send("❌ 不明なアクション。`!tournament` でヘルプを確認してください。")
+            
+    except Exception as e:
+        await ctx.send(f"❌ トーナメント機能でエラーが発生しました: {str(e)}")
+        print(f"トーナメント機能エラー: {e}")
+
+async def create_tournament(ctx, args):
+    """トーナメント作成"""
+    guild_id = ctx.guild.id
+    
+    # 既存のトーナメントチェック
+    if guild_id in active_tournaments:
+        tournament = active_tournaments[guild_id]
+        if tournament['status'] != 'ended':
+            await ctx.send(f"❌ 既にトーナメントが進行中です。`!tournament end` で終了してください。")
+            return
+    
+    # 形式解析
+    tournament_type = "シングル戦"
+    max_participants = 16
+    description = ""
+    
+    if args:
+        format_input = " ".join(args)
+        if "ダブル" in format_input or "double" in format_input.lower():
+            tournament_type = "ダブル戦"
+        elif "チーム" in format_input or "team" in format_input.lower():
+            tournament_type = "チーム戦"
+        elif "シングル" in format_input or "single" in format_input.lower():
+            tournament_type = "シングル戦"
+        else:
+            description = format_input
+    
+    # トーナメントデータ作成
+    tournament_data = {
+        'id': f"{guild_id}_{int(datetime.now().timestamp())}",
+        'guild_id': guild_id,
+        'creator': ctx.author,
+        'created_at': datetime.now(),
+        'tournament_type': tournament_type,
+        'max_participants': max_participants,
+        'description': description,
+        'participants': [],
+        'status': 'registration',  # registration, ongoing, ended
+        'bracket': [],
+        'current_round': 0,
+        'matches': {}
+    }
+    
+    active_tournaments[guild_id] = tournament_data
+    
+    embed = discord.Embed(
+        title="🏆 トーナメント作成完了！",
+        description=f"**{tournament_type}** トーナメントの参加者募集を開始",
+        color=0xffd700
+    )
+    
+    embed.add_field(
+        name="📊 基本情報",
+        value=f"**形式:** {tournament_type}\n"
+              f"**最大参加者:** {max_participants}人\n"
+              f"**現在の参加者:** 0人",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="📝 詳細",
+        value=description if description else "なし",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🔧 操作方法",
+        value="`!tournament join` - 参加登録\n"
+              "`!tournament start` - 開始\n"
+              "`!tournament bracket` - ブラケット確認",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"作成者: {ctx.author.display_name} | ID: {tournament_data['id'][:8]}")
+    
+    await ctx.send(embed=embed)
+
+async def join_tournament(ctx):
+    """トーナメント参加"""
+    guild_id = ctx.guild.id
+    user_id = ctx.author.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    if tournament['status'] != 'registration':
+        await ctx.send("❌ 現在参加登録を受け付けていません。")
+        return
+    
+    if user_id in [p['user_id'] for p in tournament['participants']]:
+        await ctx.send("⚠️ 既に参加登録済みです。")
+        return
+    
+    if len(tournament['participants']) >= tournament['max_participants']:
+        await ctx.send("❌ 参加者が満員です。")
+        return
+    
+    # 参加登録
+    participant = {
+        'user_id': user_id,
+        'user': ctx.author,
+        'joined_at': datetime.now(),
+        'wins': 0,
+        'losses': 0
+    }
+    
+    tournament['participants'].append(participant)
+    
+    embed = discord.Embed(
+        title="✅ トーナメント参加登録完了",
+        color=0x00ff88
+    )
+    
+    current_count = len(tournament['participants'])
+    
+    embed.add_field(
+        name="📊 現在の状況",
+        value=f"**参加者:** {current_count}/{tournament['max_participants']}人\n"
+              f"**形式:** {tournament['tournament_type']}\n"
+              f"**必要最小人数:** 4人",
+        inline=True
+    )
+    
+    # 参加者リスト（最新5人のみ表示）
+    recent_participants = tournament['participants'][-5:]
+    participant_list = [f"• {p['user'].display_name}" for p in recent_participants]
+    
+    embed.add_field(
+        name="👥 最新参加者",
+        value="\n".join(participant_list),
+        inline=True
+    )
+    
+    if current_count >= 4:
+        embed.add_field(
+            name="🎯 開始可能",
+            value=f"最小人数に達しました！\n`!tournament start` で開始できます。",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+async def leave_tournament(ctx):
+    """トーナメント離脱"""
+    guild_id = ctx.guild.id
+    user_id = ctx.author.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    if tournament['status'] != 'registration':
+        await ctx.send("❌ 既に開始されているため離脱できません。")
+        return
+    
+    # 参加者から削除
+    for i, participant in enumerate(tournament['participants']):
+        if participant['user_id'] == user_id:
+            del tournament['participants'][i]
+            await ctx.send(f"✅ {ctx.author.display_name} がトーナメントから離脱しました。")
+            return
+    
+    await ctx.send("❌ トーナメントに参加していません。")
+
+async def start_tournament(ctx):
+    """トーナメント開始"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    # 権限チェック
+    if ctx.author.id != tournament['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ トーナメント作成者または管理者のみ開始できます。")
+        return
+    
+    if tournament['status'] != 'registration':
+        await ctx.send("❌ 既に開始されているか、終了しています。")
+        return
+    
+    participants = tournament['participants']
+    
+    if len(participants) < 4:
+        await ctx.send("❌ トーナメント開始には最低4人必要です。")
+        return
+    
+    # ブラケット生成
+    import math
+    
+    # 2の累乗に調整
+    bracket_size = 2 ** math.ceil(math.log2(len(participants)))
+    
+    # 参加者をシャッフル
+    shuffled_participants = participants.copy()
+    random.shuffle(shuffled_participants)
+    
+    # 不戦勝者（BYE）を追加
+    while len(shuffled_participants) < bracket_size:
+        shuffled_participants.append(None)  # BYE
+    
+    # 第1ラウンドの試合を作成
+    matches = []
+    match_id = 1
+    
+    for i in range(0, len(shuffled_participants), 2):
+        player1 = shuffled_participants[i]
+        player2 = shuffled_participants[i + 1] if i + 1 < len(shuffled_participants) else None
+        
+        match_data = {
+            'id': match_id,
+            'round': 1,
+            'player1': player1,
+            'player2': player2,
+            'winner': None,
+            'status': 'pending'  # pending, completed
+        }
+        
+        # BYE の処理
+        if player1 and not player2:
+            match_data['winner'] = player1
+            match_data['status'] = 'completed'
+        elif player2 and not player1:
+            match_data['winner'] = player2
+            match_data['status'] = 'completed'
+        
+        matches.append(match_data)
+        match_id += 1
+    
+    tournament['bracket'] = matches
+    tournament['status'] = 'ongoing'
+    tournament['current_round'] = 1
+    
+    embed = discord.Embed(
+        title="🏁 トーナメント開始！",
+        description=f"**{tournament['tournament_type']}** トーナメントが開始されました",
+        color=0xffd700
+    )
+    
+    embed.add_field(
+        name="📊 情報",
+        value=f"**参加者数:** {len([p for p in participants if p])}人\n"
+              f"**第1ラウンド試合数:** {len([m for m in matches if m['status'] == 'pending'])}試合\n"
+              f"**形式:** シングルエリミネーション",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🎯 次のステップ",
+        value="`!tournament bracket` - ブラケット確認\n"
+              "`!tournament next` - 次の試合確認\n"
+              "`!tournament result @勝者` - 結果入力",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+async def show_tournament_bracket(ctx):
+    """ブラケット表示"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    if tournament['status'] == 'registration':
+        await ctx.send("❌ まだトーナメントが開始されていません。")
+        return
+    
+    embed = discord.Embed(
+        title="🏆 トーナメントブラケット",
+        color=0xffd700
+    )
+    
+    # ラウンド別に試合を整理
+    rounds = {}
+    for match in tournament['bracket']:
+        round_num = match['round']
+        if round_num not in rounds:
+            rounds[round_num] = []
+        rounds[round_num].append(match)
+    
+    for round_num in sorted(rounds.keys()):
+        round_matches = rounds[round_num]
+        
+        match_list = []
+        for match in round_matches:
+            p1_name = match['player1']['user'].display_name if match['player1'] else "BYE"
+            p2_name = match['player2']['user'].display_name if match['player2'] else "BYE"
+            
+            if match['status'] == 'completed':
+                winner_name = match['winner']['user'].display_name if match['winner'] else "TBD"
+                match_text = f"**{p1_name}** vs **{p2_name}** → 🏆 {winner_name}"
+            else:
+                match_text = f"{p1_name} vs {p2_name}"
+            
+            match_list.append(match_text)
+        
+        embed.add_field(
+            name=f"🔥 第{round_num}ラウンド",
+            value="\n".join(match_list) if match_list else "試合なし",
+            inline=False
+        )
+    
+    # 進行状況
+    total_matches = len(tournament['bracket'])
+    completed_matches = len([m for m in tournament['bracket'] if m['status'] == 'completed'])
+    
+    embed.add_field(
+        name="📊 進行状況",
+        value=f"完了試合: {completed_matches}/{total_matches}\n"
+              f"現在ラウンド: {tournament['current_round']}",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+async def show_tournament_status(ctx):
+    """トーナメント状況表示"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    status_map = {
+        'registration': '📝 参加者募集中',
+        'ongoing': '⚔️ 進行中',
+        'ended': '🏁 終了'
+    }
+    
+    embed = discord.Embed(
+        title="📊 トーナメント状況",
+        color=0x00aaff
+    )
+    
+    embed.add_field(
+        name="基本情報",
+        value=f"**ステータス:** {status_map.get(tournament['status'], tournament['status'])}\n"
+              f"**形式:** {tournament['tournament_type']}\n"
+              f"**参加者:** {len(tournament['participants'])}人\n"
+              f"**作成者:** {tournament['creator'].display_name}",
+        inline=True
+    )
+    
+    if tournament['status'] == 'ongoing':
+        current_round_matches = [m for m in tournament['bracket'] if m['round'] == tournament['current_round']]
+        pending_matches = [m for m in current_round_matches if m['status'] == 'pending']
+        
+        embed.add_field(
+            name="進行状況",
+            value=f"**現在ラウンド:** {tournament['current_round']}\n"
+                  f"**待機中試合:** {len(pending_matches)}試合\n"
+                  f"**完了試合:** {len([m for m in tournament['bracket'] if m['status'] == 'completed'])}試合",
+            inline=True
+        )
+    
+    embed.set_footer(text=f"ID: {tournament['id'][:8]} | 作成: {tournament['created_at'].strftime('%m/%d %H:%M')}")
+    
+    await ctx.send(embed=embed)
+
+async def input_match_result(ctx, args):
+    """試合結果入力"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    if tournament['status'] != 'ongoing':
+        await ctx.send("❌ 現在進行中のトーナメントがありません。")
+        return
+    
+    # 勝者の特定
+    winner = None
+    if ctx.message.mentions:
+        winner_user = ctx.message.mentions[0]
+        # 参加者から検索
+        for participant in tournament['participants']:
+            if participant['user_id'] == winner_user.id:
+                winner = participant
+                break
+    
+    if not winner:
+        await ctx.send("❌ 有効な勝者を指定してください。例: `!tournament result @勝者`")
+        return
+    
+    # 該当する試合を検索
+    current_round = tournament['current_round']
+    pending_matches = [m for m in tournament['bracket'] 
+                      if m['round'] == current_round and m['status'] == 'pending']
+    
+    target_match = None
+    for match in pending_matches:
+        if (match['player1'] and match['player1']['user_id'] == winner['user_id']) or \
+           (match['player2'] and match['player2']['user_id'] == winner['user_id']):
+            target_match = match
+            break
+    
+    if not target_match:
+        await ctx.send("❌ 該当する試合が見つかりません。")
+        return
+    
+    # 結果を記録
+    target_match['winner'] = winner
+    target_match['status'] = 'completed'
+    
+    # 勝者の統計更新
+    winner['wins'] += 1
+    
+    # 敗者の統計更新
+    loser = None
+    if target_match['player1'] and target_match['player1']['user_id'] != winner['user_id']:
+        loser = target_match['player1']
+    elif target_match['player2'] and target_match['player2']['user_id'] != winner['user_id']:
+        loser = target_match['player2']
+    
+    if loser:
+        loser['losses'] += 1
+    
+    embed = discord.Embed(
+        title="✅ 試合結果入力完了",
+        color=0x00ff88
+    )
+    
+    p1_name = target_match['player1']['user'].display_name if target_match['player1'] else "BYE"
+    p2_name = target_match['player2']['user'].display_name if target_match['player2'] else "BYE"
+    winner_name = winner['user'].display_name
+    
+    embed.add_field(
+        name="試合結果",
+        value=f"**{p1_name}** vs **{p2_name}**\n🏆 勝者: **{winner_name}**",
+        inline=False
+    )
+    
+    # 次ラウンドの生成をチェック
+    current_round_matches = [m for m in tournament['bracket'] if m['round'] == current_round]
+    pending_current = [m for m in current_round_matches if m['status'] == 'pending']
+    
+    if not pending_current:
+        # 現在ラウンド完了、次ラウンド生成
+        await generate_next_round(ctx, tournament)
+    
+    await ctx.send(embed=embed)
+
+async def generate_next_round(ctx, tournament):
+    """次ラウンド生成"""
+    current_round = tournament['current_round']
+    current_round_matches = [m for m in tournament['bracket'] if m['round'] == current_round]
+    winners = [m['winner'] for m in current_round_matches if m['winner']]
+    
+    if len(winners) <= 1:
+        # トーナメント終了
+        if winners:
+            champion = winners[0]
+            embed = discord.Embed(
+                title="🏆 トーナメント終了！",
+                description=f"**優勝者: {champion['user'].display_name}**",
+                color=0xffd700
+            )
+            
+            embed.add_field(
+                name="🎊 結果",
+                value=f"🥇 優勝: {champion['user'].display_name}\n"
+                      f"勝利数: {champion['wins']}勝",
+                inline=False
+            )
+            
+            tournament['status'] = 'ended'
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("❌ トーナメント処理中にエラーが発生しました。")
+        return
+    
+    # 次ラウンドの試合を生成
+    next_round = current_round + 1
+    match_id = max([m['id'] for m in tournament['bracket']]) + 1
+    
+    next_matches = []
+    for i in range(0, len(winners), 2):
+        player1 = winners[i]
+        player2 = winners[i + 1] if i + 1 < len(winners) else None
+        
+        match_data = {
+            'id': match_id,
+            'round': next_round,
+            'player1': player1,
+            'player2': player2,
+            'winner': None,
+            'status': 'pending'
+        }
+        
+        # BYE処理
+        if player1 and not player2:
+            match_data['winner'] = player1
+            match_data['status'] = 'completed'
+        
+        next_matches.append(match_data)
+        match_id += 1
+    
+    tournament['bracket'].extend(next_matches)
+    tournament['current_round'] = next_round
+    
+    embed = discord.Embed(
+        title="🔥 次ラウンド開始！",
+        description=f"第{next_round}ラウンドが開始されました",
+        color=0xff6b6b
+    )
+    
+    match_list = []
+    for match in next_matches:
+        if match['status'] == 'pending':
+            p1_name = match['player1']['user'].display_name if match['player1'] else "BYE"
+            p2_name = match['player2']['user'].display_name if match['player2'] else "BYE"
+            match_list.append(f"{p1_name} vs {p2_name}")
+    
+    embed.add_field(
+        name=f"第{next_round}ラウンド 対戦カード",
+        value="\n".join(match_list) if match_list else "全てBYE",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+async def show_next_matches(ctx):
+    """次の試合表示"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    if tournament['status'] != 'ongoing':
+        await ctx.send("❌ 現在進行中のトーナメントがありません。")
+        return
+    
+    current_round = tournament['current_round']
+    pending_matches = [m for m in tournament['bracket'] 
+                      if m['round'] == current_round and m['status'] == 'pending']
+    
+    if not pending_matches:
+        await ctx.send("❌ 待機中の試合がありません。")
+        return
+    
+    embed = discord.Embed(
+        title="🎯 次の試合",
+        description=f"第{current_round}ラウンド 待機中の試合",
+        color=0xff6b6b
+    )
+    
+    for match in pending_matches:
+        p1_name = match['player1']['user'].display_name if match['player1'] else "BYE"
+        p2_name = match['player2']['user'].display_name if match['player2'] else "BYE"
+        
+        embed.add_field(
+            name=f"試合 #{match['id']}",
+            value=f"{p1_name} vs {p2_name}",
+            inline=True
+        )
+    
+    embed.add_field(
+        name="📝 結果入力",
+        value="`!tournament result @勝者` で結果を入力してください",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+async def end_tournament(ctx):
+    """トーナメント終了"""
+    guild_id = ctx.guild.id
+    
+    if guild_id not in active_tournaments:
+        await ctx.send("❌ アクティブなトーナメントがありません。")
+        return
+    
+    tournament = active_tournaments[guild_id]
+    
+    # 権限チェック
+    if ctx.author.id != tournament['creator'].id and not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("❌ トーナメント作成者または管理者のみ終了できます。")
+        return
+    
+    tournament['status'] = 'ended'
+    
+    embed = discord.Embed(
+        title="🏁 トーナメント終了",
+        description=f"**{tournament['tournament_type']}** トーナメントを終了しました",
+        color=0xff6b6b
+    )
+    
+    # 最終結果
+    if tournament['status'] == 'ongoing':
+        completed_matches = [m for m in tournament['bracket'] if m['status'] == 'completed']
+        embed.add_field(
+            name="📊 最終統計",
+            value=f"完了試合数: {len(completed_matches)}\n"
+                  f"参加者数: {len(tournament['participants'])}人",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
 
 # Botを起動
 if __name__ == "__main__":
