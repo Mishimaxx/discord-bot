@@ -1,6 +1,7 @@
 import os
 import discord
 from discord.ext import commands
+from discord import ui
 from dotenv import load_dotenv
 import google.generativeai as genai
 import asyncio
@@ -638,12 +639,28 @@ async def show_commands(ctx):
         "🎯 **ランクバランス:** 自動でバランス調整されたチーム分け",
         "🔍 **ランクチェック:** 参加時に条件を自動確認",
         "📊 **統計表示:** 参加者のランク分布とバランス評価",
-        "⏰ **自動リマインダー:** 時間指定で5分前に通知"
+        "⏰ **自動リマインダー:** 時間指定で5分前に通知",
+        "🖱️ **ボタン操作:** 参加/離脱/チーム分けがボタン1クリック"
     ]
     
     embed.add_field(
         name="✨ 特殊機能",
         value="\n".join(special_features),
+        inline=False
+    )
+    
+    # ボタン操作の説明
+    button_info = [
+        "✅ **参加ボタン** - ワンクリックで参加",
+        "❌ **離脱ボタン** - ワンクリックで離脱", 
+        "🎯 **チーム分けボタン** - 自動チーム分け実行",
+        "🔍 **ランク確認ボタン** - 参加者の適格性確認",
+        "🏁 **終了ボタン** - 募集終了（作成者のみ）"
+    ]
+    
+    embed.add_field(
+        name="🖱️ ボタン機能（カスタム・ランク募集）",
+        value="\n".join(button_info),
         inline=False
     )
     
@@ -3778,6 +3795,269 @@ tournament_matches = {}  # {tournament_id: [match_data]}
 # スクリム/カスタムゲーム機能
 # ===============================
 
+class CustomGameView(discord.ui.View):
+    """カスタムゲーム募集のボタンUI"""
+    
+    def __init__(self, timeout=3600):  # 1時間でタイムアウト
+        super().__init__(timeout=timeout)
+        
+    @discord.ui.button(label='参加', emoji='✅', style=discord.ButtonStyle.success)
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """参加ボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        user_id = interaction.user.id
+        
+        if channel_id not in active_scrims:
+            await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+            return
+        
+        scrim = active_scrims[channel_id]
+        
+        if user_id in scrim['participants']:
+            await interaction.followup.send("⚠️ 既に参加済みです。", ephemeral=True)
+            return
+        
+        if len(scrim['participants']) >= scrim['max_players']:
+            await interaction.followup.send("❌ 参加者が満員です。", ephemeral=True)
+            return
+        
+        # 参加処理
+        scrim['participants'].append(user_id)
+        
+        current_count = len(scrim['participants'])
+        max_players = scrim['max_players']
+        
+        if current_count >= max_players:
+            scrim['status'] = 'ready'
+        
+        # 募集メッセージを更新
+        embed = await create_custom_embed(scrim, interaction.guild)
+        await interaction.edit_original_response(embed=embed, view=self)
+        
+        await interaction.followup.send(f"✅ {interaction.user.display_name} が参加しました！ ({current_count}/{max_players})", ephemeral=False)
+    
+    @discord.ui.button(label='離脱', emoji='❌', style=discord.ButtonStyle.danger)
+    async def leave_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """離脱ボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        user_id = interaction.user.id
+        
+        if channel_id not in active_scrims:
+            await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+            return
+        
+        scrim = active_scrims[channel_id]
+        
+        if user_id not in scrim['participants']:
+            await interaction.followup.send("⚠️ カスタムゲームに参加していません。", ephemeral=True)
+            return
+        
+        # 作成者の場合は特別処理
+        if user_id == scrim['creator'].id:
+            if len(scrim['participants']) > 1:
+                await interaction.followup.send("⚠️ 作成者は他の参加者がいる間は離脱できません。終了ボタンで募集を終了してください。", ephemeral=True)
+                return
+        
+        # 離脱処理
+        scrim['participants'].remove(user_id)
+        scrim['status'] = 'recruiting'
+        
+        # 募集メッセージを更新
+        embed = await create_custom_embed(scrim, interaction.guild)
+        await interaction.edit_original_response(embed=embed, view=self)
+        
+        await interaction.followup.send(f"✅ {interaction.user.display_name} が離脱しました。", ephemeral=False)
+    
+    @discord.ui.button(label='チーム分け', emoji='🎯', style=discord.ButtonStyle.primary)
+    async def team_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """チーム分けボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        
+        if channel_id not in active_scrims:
+            await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+            return
+        
+        scrim = active_scrims[channel_id]
+        
+        if len(scrim['participants']) < 2:
+            await interaction.followup.send("❌ チーム分けには最低2人必要です。", ephemeral=True)
+            return
+        
+        guild = interaction.guild
+        members = []
+        for participant_id in scrim['participants']:
+            member = guild.get_member(participant_id)
+            if member:
+                members.append(member)
+        
+        # チーム分けロジック
+        random.shuffle(members)
+        
+        if scrim['game_mode'] in ['5v5', '5V5']:
+            team_size = 5
+        elif scrim['game_mode'] in ['3v3', '3V3']:
+            team_size = 3
+        elif scrim['game_mode'] in ['2v2', '2V2']:
+            team_size = 2
+        else:
+            team_size = len(members) // 2
+        
+        team1 = members[:team_size]
+        team2 = members[team_size:team_size*2]
+        extras = members[team_size*2:] if len(members) > team_size*2 else []
+        
+        # チーム情報を保存
+        scrim['teams'] = {
+            'team1': [m.id for m in team1],
+            'team2': [m.id for m in team2],
+            'extras': [m.id for m in extras]
+        }
+        
+        embed = discord.Embed(
+            title="🎯 カスタムゲームチーム分け結果",
+            color=0x00ff88
+        )
+        
+        embed.add_field(
+            name="🔴 チーム1",
+            value="\n".join([f"• {m.display_name}" for m in team1]),
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔵 チーム2",
+            value="\n".join([f"• {m.display_name}" for m in team2]),
+            inline=True
+        )
+        
+        if extras:
+            embed.add_field(
+                name="⚪ 待機",
+                value="\n".join([f"• {m.display_name}" for m in extras]),
+                inline=False
+            )
+        
+        embed.set_footer(text=f"ゲームモード: {scrim['game_mode']} | 頑張って！")
+        
+        await interaction.followup.send(embed=embed)
+    
+    @discord.ui.button(label='終了', emoji='🏁', style=discord.ButtonStyle.secondary)
+    async def end_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """終了ボタン（作成者のみ）"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        user_id = interaction.user.id
+        
+        if channel_id not in active_scrims:
+            await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+            return
+        
+        scrim = active_scrims[channel_id]
+        
+        # 作成者または管理者のみ終了可能
+        if user_id != scrim['creator'].id and not interaction.user.guild_permissions.manage_messages:
+            await interaction.followup.send("❌ カスタムゲームの作成者または管理者のみ終了できます。", ephemeral=True)
+            return
+        
+        # リマインダーキャンセル
+        scrim_id = scrim['id']
+        if scrim_id in scrim_reminders:
+            scrim_reminders[scrim_id].cancel()
+            del scrim_reminders[scrim_id]
+        
+        # スクリム削除
+        del active_scrims[channel_id]
+        
+        embed = discord.Embed(
+            title="🏁 カスタムゲーム募集終了",
+            description=f"**{scrim['game_mode']}** の募集を終了しました。",
+            color=0xff6b6b
+        )
+        
+        embed.add_field(
+            name="📊 最終統計",
+            value=f"**参加者数:** {len(scrim['participants'])}人\n"
+                  f"**募集時間:** {(datetime.now() - scrim['created_at']).seconds // 60}分間",
+            inline=False
+        )
+        
+        # ボタンを無効化
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.edit_original_response(embed=embed, view=self)
+        await interaction.followup.send("カスタムゲーム募集が終了されました。", ephemeral=False)
+
+async def create_custom_embed(scrim, guild):
+    """カスタムゲーム募集のEmbed作成"""
+    # 参加者リスト作成
+    participants_list = []
+    for participant_id in scrim['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            participants_list.append(f"• {member.display_name}")
+    
+    status_map = {
+        'recruiting': '📢 募集中',
+        'ready': '✅ 準備完了',
+        'in_progress': '🎮 進行中',
+        'ended': '🏁 終了'
+    }
+    
+    current_count = len(scrim['participants'])
+    max_players = scrim['max_players']
+    
+    title = "🎯 カスタムゲーム募集"
+    if current_count >= max_players:
+        title = "🎉 カスタムゲーム募集（満員）"
+    
+    embed = discord.Embed(
+        title=title,
+        description=f"**{scrim['game_mode']}** のメンバーを募集中",
+        color=0x00ff88 if current_count < max_players else 0xffd700
+    )
+    
+    embed.add_field(
+        name="📊 募集情報",
+        value=f"**ゲームモード:** {scrim['game_mode']}\n"
+              f"**最大人数:** {max_players}人\n"
+              f"**開始時間:** {scrim['scheduled_time']}\n"
+              f"**現在の参加者:** {current_count}/{max_players}人\n"
+              f"**ステータス:** {status_map.get(scrim['status'], scrim['status'])}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list) if participants_list else "なし",
+        inline=True
+    )
+    
+    if scrim.get('description'):
+        embed.add_field(
+            name="📝 詳細",
+            value=scrim['description'],
+            inline=False
+        )
+    
+    if scrim.get('teams'):
+        embed.add_field(
+            name="🎯 チーム分け",
+            value="チーム分け済み（チーム分けボタンで再確認）",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"作成者: {scrim['creator'].display_name} | ID: {scrim['id'][:8]}")
+    
+    return embed
+
 @bot.command(name='custom', help='カスタムゲーム募集（例: !custom create 10人 20:00, !custom join, !custom status）')
 @prevent_duplicate_execution
 async def scrim_manager(ctx, action=None, *args):
@@ -3919,43 +4199,19 @@ async def create_scrim(ctx, args):
     
     active_scrims[channel_id] = scrim_data
     
-    # 募集メッセージ作成
-    embed = discord.Embed(
-        title="🎯 カスタムゲーム募集開始！",
-        description=f"**{game_mode}** のメンバーを募集中",
-        color=0x00ff88
-    )
+    # ボタン付き募集メッセージ作成
+    embed = await create_custom_embed(scrim_data, ctx.guild)
     
-    embed.add_field(
-        name="📊 募集情報",
-        value=f"**最大人数:** {max_players}人\n"
-              f"**開始時間:** {scheduled_time}\n"
-              f"**現在の参加者:** 1/{max_players}人",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="👥 参加者",
-        value=f"• {ctx.author.display_name}",
-        inline=True
-    )
-    
-    if description:
-        embed.add_field(
-            name="📝 詳細",
-            value=description,
-            inline=False
-        )
-    
+    # 操作方法を追加（ボタンとコマンド両方）
     embed.add_field(
         name="🔧 操作方法",
-        value="`!custom join` - 参加\n`!custom leave` - 離脱\n`!custom status` - 状況確認",
+        value="**ボタン操作:** 下のボタンをクリック\n"
+              "**コマンド操作:** `!custom join/leave/status`",
         inline=False
     )
     
-    embed.set_footer(text=f"募集ID: {scrim_data['id'][:8]} | 作成者: {ctx.author.display_name}")
-    
-    message = await ctx.send(embed=embed)
+    view = CustomGameView()
+    message = await ctx.send(embed=embed, view=view)
     scrim_data['message_id'] = message.id
     
     # 自動リマインダー設定（開始時間が指定されている場合）
@@ -4155,6 +4411,452 @@ async def end_scrim(ctx):
 # ランクマッチ募集機能
 # ===============================
 
+class RankedRecruitView(discord.ui.View):
+    """ランクマッチ募集のボタンUI"""
+    
+    def __init__(self, timeout=3600):  # 1時間でタイムアウト
+        super().__init__(timeout=timeout)
+        
+    @discord.ui.button(label='参加', emoji='✅', style=discord.ButtonStyle.success)
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """参加ボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        user_id = interaction.user.id
+        
+        if channel_id not in active_rank_recruits:
+            await interaction.followup.send("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+            return
+        
+        recruit = active_rank_recruits[channel_id]
+        
+        if user_id in recruit['participants']:
+            await interaction.followup.send("⚠️ 既に参加済みです。", ephemeral=True)
+            return
+        
+        if len(recruit['participants']) >= recruit['max_players']:
+            await interaction.followup.send("❌ 参加者が満員です。", ephemeral=True)
+            return
+        
+        # ランク条件チェック
+        if not check_rank_eligibility(user_id, recruit):
+            rank_req = recruit['rank_requirement']
+            await interaction.followup.send(f"❌ ランク条件（{rank_req}）を満たしていません。\n💡 `!rank set current [ランク]` でランクを設定してください。", ephemeral=True)
+            return
+        
+        # 参加処理
+        recruit['participants'].append(user_id)
+        
+        current_count = len(recruit['participants'])
+        max_players = recruit['max_players']
+        
+        if current_count >= max_players:
+            recruit['status'] = 'ready'
+        
+        # 募集メッセージを更新
+        embed = await create_ranked_embed(recruit, interaction.guild)
+        await interaction.edit_original_response(embed=embed, view=self)
+        
+        user_rank = get_user_rank_display(user_id)
+        await interaction.followup.send(f"✅ {interaction.user.display_name} {user_rank} が参加しました！ ({current_count}/{max_players})", ephemeral=False)
+    
+    @discord.ui.button(label='離脱', emoji='❌', style=discord.ButtonStyle.danger)
+    async def leave_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """離脱ボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        user_id = interaction.user.id
+        
+        if channel_id not in active_rank_recruits:
+            await interaction.followup.send("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+            return
+        
+        recruit = active_rank_recruits[channel_id]
+        
+        if user_id not in recruit['participants']:
+            await interaction.followup.send("⚠️ ランクマッチ募集に参加していません。", ephemeral=True)
+            return
+        
+        # 作成者の場合は特別処理
+        if user_id == recruit['creator'].id:
+            if len(recruit['participants']) > 1:
+                await interaction.followup.send("⚠️ 作成者は他の参加者がいる間は離脱できません。終了ボタンで募集を終了してください。", ephemeral=True)
+                return
+        
+        # 離脱処理
+        recruit['participants'].remove(user_id)
+        recruit['status'] = 'recruiting'
+        
+        # 募集メッセージを更新
+        embed = await create_ranked_embed(recruit, interaction.guild)
+        await interaction.edit_original_response(embed=embed, view=self)
+        
+        await interaction.followup.send(f"✅ {interaction.user.display_name} が離脱しました。", ephemeral=False)
+    
+    @discord.ui.button(label='ランクチーム分け', emoji='🎯', style=discord.ButtonStyle.primary)
+    async def team_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """ランクバランスチーム分けボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        
+        if channel_id not in active_rank_recruits:
+            await interaction.followup.send("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+            return
+        
+        recruit = active_rank_recruits[channel_id]
+        
+        if len(recruit['participants']) < 2:
+            await interaction.followup.send("❌ チーム分けには最低2人必要です。", ephemeral=True)
+            return
+        
+        # ランクバランスチーム分けの実行（既存の関数を使用）
+        await execute_ranked_team_divide_logic(recruit, interaction)
+    
+    @discord.ui.button(label='ランク確認', emoji='🔍', style=discord.ButtonStyle.secondary)
+    async def check_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """ランク確認ボタン"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        
+        if channel_id not in active_rank_recruits:
+            await interaction.followup.send("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+            return
+        
+        recruit = active_rank_recruits[channel_id]
+        
+        guild = interaction.guild
+        rank_check_results = []
+        eligible_count = 0
+        ineligible_count = 0
+        
+        for participant_id in recruit['participants']:
+            member = guild.get_member(participant_id)
+            if member:
+                is_eligible = check_rank_eligibility(participant_id, recruit)
+                rank_display = get_user_rank_display(participant_id)
+                
+                if is_eligible:
+                    status = "✅"
+                    eligible_count += 1
+                else:
+                    status = "❌"
+                    ineligible_count += 1
+                
+                rank_check_results.append(f"{status} {member.display_name} {rank_display}")
+        
+        embed = discord.Embed(
+            title="🔍 参加者ランク確認",
+            color=0x00ff88 if ineligible_count == 0 else 0xff6b6b
+        )
+        
+        embed.add_field(
+            name="📊 確認結果",
+            value=f"**適格者:** {eligible_count}人\n"
+                  f"**不適格者:** {ineligible_count}人\n"
+                  f"**ランク条件:** {recruit['rank_requirement']}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="👥 詳細結果",
+            value="\n".join(rank_check_results) if rank_check_results else "参加者なし",
+            inline=False
+        )
+        
+        if ineligible_count > 0:
+            embed.add_field(
+                name="⚠️ 注意",
+                value="ランク条件を満たしていない参加者がいます。",
+                inline=False
+            )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label='終了', emoji='🏁', style=discord.ButtonStyle.secondary)
+    async def end_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """終了ボタン（作成者のみ）"""
+        await interaction.response.defer()
+        
+        channel_id = interaction.channel.id
+        user_id = interaction.user.id
+        
+        if channel_id not in active_rank_recruits:
+            await interaction.followup.send("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+            return
+        
+        recruit = active_rank_recruits[channel_id]
+        
+        # 作成者または管理者のみ終了可能
+        if user_id != recruit['creator'].id and not interaction.user.guild_permissions.manage_messages:
+            await interaction.followup.send("❌ ランクマッチ募集の作成者または管理者のみ終了できます。", ephemeral=True)
+            return
+        
+        # リマインダーキャンセル
+        recruit_id = recruit['id']
+        if recruit_id in rank_recruit_reminders:
+            rank_recruit_reminders[recruit_id].cancel()
+            del rank_recruit_reminders[recruit_id]
+        
+        # 募集削除
+        del active_rank_recruits[channel_id]
+        
+        embed = discord.Embed(
+            title="🏁 ランクマッチ募集終了",
+            description=f"**{recruit['rank_requirement']}** の募集を終了しました。",
+            color=0xff6b6b
+        )
+        
+        embed.add_field(
+            name="📊 最終統計",
+            value=f"**参加者数:** {len(recruit['participants'])}人\n"
+                  f"**募集時間:** {(datetime.now() - recruit['created_at']).seconds // 60}分間",
+            inline=False
+        )
+        
+        # ボタンを無効化
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.edit_original_response(embed=embed, view=self)
+        await interaction.followup.send("ランクマッチ募集が終了されました。", ephemeral=False)
+
+async def create_ranked_embed(recruit, guild):
+    """ランクマッチ募集のEmbed作成"""
+    # 参加者リスト作成（ランク情報付き）
+    participants_list = []
+    rank_stats = {}
+    
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            rank_info = get_user_rank_display(participant_id)
+            participants_list.append(f"• {member.display_name} {rank_info}")
+            
+            # ランク統計
+            if participant_id in user_ranks and user_ranks[participant_id].get('current'):
+                rank = user_ranks[participant_id]['current']
+                tier = VALORANT_RANKS[rank]['tier']
+                rank_stats[tier] = rank_stats.get(tier, 0) + 1
+    
+    status_map = {
+        'recruiting': '📢 募集中',
+        'ready': '✅ 準備完了',
+        'in_progress': '🎮 進行中',
+        'ended': '🏁 終了'
+    }
+    
+    current_count = len(recruit['participants'])
+    max_players = recruit['max_players']
+    
+    title = "🏆 ランクマッチ募集"
+    if current_count >= max_players:
+        title = "🎉 ランクマッチ募集（満員）"
+    
+    embed = discord.Embed(
+        title=title,
+        description=f"**{recruit['rank_requirement']}** のメンバーを募集中",
+        color=0x4a90e2 if current_count < max_players else 0xffd700
+    )
+    
+    embed.add_field(
+        name="📊 募集情報",
+        value=f"**ランク条件:** {recruit['rank_requirement']}\n"
+              f"**最大人数:** {max_players}人\n"
+              f"**開始時間:** {recruit['scheduled_time']}\n"
+              f"**現在の参加者:** {current_count}/{max_players}人\n"
+              f"**ステータス:** {status_map.get(recruit['status'], recruit['status'])}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👥 参加者一覧",
+        value="\n".join(participants_list) if participants_list else "なし",
+        inline=True
+    )
+    
+    # ランク分布（参加者がいる場合）
+    if rank_stats:
+        tier_names = {9: "レディアント", 8: "イモータル", 7: "アセンダント", 6: "ダイヤ", 5: "プラチナ", 4: "ゴールド", 3: "シルバー", 2: "ブロンズ", 1: "アイアン"}
+        rank_distribution = []
+        for tier in sorted(rank_stats.keys(), reverse=True):
+            tier_name = tier_names.get(tier, f"ティア{tier}")
+            rank_distribution.append(f"{tier_name}: {rank_stats[tier]}人")
+        
+        embed.add_field(
+            name="🏆 ランク分布",
+            value="\n".join(rank_distribution),
+            inline=False
+        )
+    
+    if recruit.get('description'):
+        embed.add_field(
+            name="📝 詳細",
+            value=recruit['description'],
+            inline=False
+        )
+    
+    if recruit.get('teams'):
+        embed.add_field(
+            name="🎯 チーム分け",
+            value="チーム分け済み（チーム分けボタンで再確認）",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"作成者: {recruit['creator'].display_name} | ID: {recruit['id'][:8]}")
+    
+    return embed
+
+async def execute_ranked_team_divide_logic(recruit, interaction):
+    """ランクバランスチーム分けのロジック実行"""
+    guild = interaction.guild
+    members = []
+    ranked_members = []
+    
+    # 参加者のランク情報を取得
+    total_rank_value = 0
+    rank_count = 0
+    
+    for participant_id in recruit['participants']:
+        member = guild.get_member(participant_id)
+        if member:
+            members.append(member)
+            
+            # ランク情報取得
+            if participant_id in user_ranks and user_ranks[participant_id].get('current'):
+                rank_name = user_ranks[participant_id]['current']
+                rank_value = VALORANT_RANKS[rank_name]['value']
+                ranked_members.append({
+                    'member': member,
+                    'rank': rank_name,
+                    'value': rank_value
+                })
+                total_rank_value += rank_value
+                rank_count += 1
+            else:
+                # ランク未設定者は平均ランクで計算
+                ranked_members.append({
+                    'member': member,
+                    'rank': None,
+                    'value': 400  # ゴールド1レベル
+                })
+    
+    # 平均ランク値を計算
+    if rank_count > 0:
+        avg_rank_value = total_rank_value / rank_count
+    else:
+        avg_rank_value = 400
+    
+    # 未ランクメンバーに平均値を適用
+    for member_data in ranked_members:
+        if member_data['rank'] is None:
+            member_data['value'] = avg_rank_value
+    
+    # ランクバランス調整チーム分け
+    def balance_teams_by_rank(members_data, team_size):
+        members_data = sorted(members_data, key=lambda x: x['value'], reverse=True)
+        team1 = []
+        team2 = []
+        
+        for member_data in members_data:
+            team1_total = sum(m['value'] for m in team1)
+            team2_total = sum(m['value'] for m in team2)
+            
+            if len(team1) >= team_size:
+                team2.append(member_data)
+            elif len(team2) >= team_size:
+                team1.append(member_data)
+            else:
+                if team1_total <= team2_total:
+                    team1.append(member_data)
+                else:
+                    team2.append(member_data)
+        
+        return team1, team2
+    
+    # チーム分けの実行
+    team_size = len(ranked_members) // 2
+    team1, team2 = balance_teams_by_rank(ranked_members, team_size)
+    
+    # チーム情報を保存
+    recruit['teams'] = {
+        'team1': [m['member'].id for m in team1],
+        'team2': [m['member'].id for m in team2]
+    }
+    
+    embed = discord.Embed(
+        title="🎯 ランクマッチ チーム分け結果",
+        description="ランクバランスを考慮したチーム分け",
+        color=0x4a90e2
+    )
+    
+    # チーム1の情報
+    team1_display = []
+    team1_total = 0
+    for member_data in team1:
+        member = member_data['member']
+        rank = member_data['rank']
+        value = member_data['value']
+        team1_total += value
+        
+        if rank:
+            rank_info = VALORANT_RANKS[rank]
+            team1_display.append(f"• {member.display_name} ({rank_info['display']})")
+        else:
+            team1_display.append(f"• {member.display_name} (ランク未設定)")
+    
+    embed.add_field(
+        name="🔴 チーム1",
+        value="\n".join(team1_display),
+        inline=True
+    )
+    
+    # チーム2の情報
+    team2_display = []
+    team2_total = 0
+    for member_data in team2:
+        member = member_data['member']
+        rank = member_data['rank']
+        value = member_data['value']
+        team2_total += value
+        
+        if rank:
+            rank_info = VALORANT_RANKS[rank]
+            team2_display.append(f"• {member.display_name} ({rank_info['display']})")
+        else:
+            team2_display.append(f"• {member.display_name} (ランク未設定)")
+    
+    embed.add_field(
+        name="🔵 チーム2",
+        value="\n".join(team2_display),
+        inline=True
+    )
+    
+    # バランス情報
+    avg1 = team1_total / len(team1) if team1 else 0
+    avg2 = team2_total / len(team2) if team2 else 0
+    balance_diff = abs(avg1 - avg2)
+    balance_quality = "完璧" if balance_diff < 50 else "良好" if balance_diff < 100 else "やや偏り" if balance_diff < 150 else "偏りあり"
+    
+    embed.add_field(
+        name="⚖️ バランス評価",
+        value=f"{balance_quality} (差: {balance_diff:.0f})",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📊 平均ランク値",
+        value=f"チーム1: {avg1:.0f} | チーム2: {avg2:.0f}",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"ランク条件: {recruit['rank_requirement']} | 頑張って！")
+    
+    await interaction.followup.send(embed=embed)
+
 @bot.command(name='ranked', aliases=['ランク募集', 'rank_recruit'], help='ランクマッチ募集（例: !ranked create ダイヤ帯 20:00, !ranked join, !ranked status）')
 @prevent_duplicate_execution
 async def ranked_recruit_manager(ctx, action=None, *args):
@@ -4306,38 +5008,14 @@ async def create_ranked_recruit(ctx, args):
     
     active_rank_recruits[channel_id] = recruit_data
     
-    # 募集メッセージ作成
-    embed = discord.Embed(
-        title="🏆 ランクマッチ募集開始！",
-        description=f"**{rank_requirement}** のメンバーを募集中",
-        color=0x4a90e2
-    )
+    # ボタン付き募集メッセージ作成
+    embed = await create_ranked_embed(recruit_data, ctx.guild)
     
-    embed.add_field(
-        name="📊 募集情報",
-        value=f"**ランク条件:** {rank_requirement}\n"
-              f"**最大人数:** {max_players}人\n"
-              f"**開始時間:** {scheduled_time}\n"
-              f"**現在の参加者:** 1/{max_players}人",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="👥 参加者",
-        value=f"• {ctx.author.display_name}",
-        inline=True
-    )
-    
-    if description:
-        embed.add_field(
-            name="📝 詳細",
-            value=description,
-            inline=False
-        )
-    
+    # 操作方法を追加（ボタンとコマンド両方）
     embed.add_field(
         name="🔧 操作方法",
-        value="`!ranked join` - 参加\n`!ranked leave` - 離脱\n`!ranked status` - 状況確認",
+        value="**ボタン操作:** 下のボタンをクリック\n"
+              "**コマンド操作:** `!ranked join/leave/status`",
         inline=False
     )
     
@@ -4355,9 +5033,8 @@ async def create_ranked_recruit(ctx, args):
             inline=False
         )
     
-    embed.set_footer(text=f"募集ID: {recruit_data['id'][:8]} | 作成者: {ctx.author.display_name}")
-    
-    message = await ctx.send(embed=embed)
+    view = RankedRecruitView()
+    message = await ctx.send(embed=embed, view=view)
     recruit_data['message_id'] = message.id
     
     # 自動リマインダー設定
