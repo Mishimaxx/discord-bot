@@ -3801,42 +3801,86 @@ class CustomGameView(discord.ui.View):
     def __init__(self, timeout=3600):  # 1時間でタイムアウト
         super().__init__(timeout=timeout)
         
+    async def on_timeout(self):
+        """タイムアウト時の処理"""
+        try:
+            # ボタンを無効化
+            for item in self.children:
+                item.disabled = True
+            
+            # メッセージを更新してタイムアウトを通知
+            embed = discord.Embed(
+                title="⏰ カスタムゲーム募集タイムアウト",
+                description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
+                color=0xffa500
+            )
+            
+            # メッセージを更新（可能な場合のみ）
+            if hasattr(self, 'message') and self.message:
+                try:
+                    await self.message.edit(view=self, embed=embed)
+                except:
+                    pass  # メッセージ更新に失敗しても継続
+        except Exception as e:
+            print(f"CustomGameView タイムアウト処理エラー: {e}")
+            
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """エラーハンドリング"""
+        print(f"CustomGameView エラー: {error}")
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 操作中にエラーが発生しました。しばらく待ってから再試行してください。", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ 操作中にエラーが発生しました。しばらく待ってから再試行してください。", ephemeral=True)
+        except:
+            pass  # エラー通知に失敗しても継続
+        
     @discord.ui.button(label='参加', emoji='✅', style=discord.ButtonStyle.success)
     async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """参加ボタン"""
-        await interaction.response.defer()
-        
-        channel_id = interaction.channel.id
-        user_id = interaction.user.id
-        
-        if channel_id not in active_scrims:
-            await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
-            return
-        
-        scrim = active_scrims[channel_id]
-        
-        if user_id in scrim['participants']:
-            await interaction.followup.send("⚠️ 既に参加済みです。", ephemeral=True)
-            return
-        
-        if len(scrim['participants']) >= scrim['max_players']:
-            await interaction.followup.send("❌ 参加者が満員です。", ephemeral=True)
-            return
-        
-        # 参加処理
-        scrim['participants'].append(user_id)
-        
-        current_count = len(scrim['participants'])
-        max_players = scrim['max_players']
-        
-        if current_count >= max_players:
-            scrim['status'] = 'ready'
-        
-        # 募集メッセージを更新
-        embed = await create_custom_embed(scrim, interaction.guild)
-        await interaction.edit_original_response(embed=embed, view=self)
-        
-        await interaction.followup.send(f"✅ {interaction.user.display_name} が参加しました！ ({current_count}/{max_players})", ephemeral=False)
+        try:
+            await interaction.response.defer()
+            
+            channel_id = interaction.channel.id
+            user_id = interaction.user.id
+            
+            if channel_id not in active_scrims:
+                await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+                return
+            
+            scrim = active_scrims[channel_id]
+            
+            if user_id in scrim['participants']:
+                await interaction.followup.send("⚠️ 既に参加済みです。", ephemeral=True)
+                return
+            
+            if len(scrim['participants']) >= scrim['max_players']:
+                await interaction.followup.send("❌ 参加者が満員です。", ephemeral=True)
+                return
+            
+            # 参加処理
+            scrim['participants'].append(user_id)
+            
+            current_count = len(scrim['participants'])
+            max_players = scrim['max_players']
+            
+            if current_count >= max_players:
+                scrim['status'] = 'ready'
+            
+            # 募集メッセージを更新
+            embed = await create_custom_embed(scrim, interaction.guild)
+            await interaction.edit_original_response(embed=embed, view=self)
+            
+            await interaction.followup.send(f"✅ {interaction.user.display_name} が参加しました！ ({current_count}/{max_players})", ephemeral=False)
+        except Exception as e:
+            print(f"join_button エラー: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ 参加処理中にエラーが発生しました。", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ 参加処理中にエラーが発生しました。", ephemeral=True)
+            except:
+                pass
     
     @discord.ui.button(label='離脱', emoji='❌', style=discord.ButtonStyle.danger)
     async def leave_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -3926,13 +3970,13 @@ class CustomGameView(discord.ui.View):
         
         embed.add_field(
             name="🔴 チーム1",
-            value="\n".join([f"• {m.display_name}" for m in team1]),
+            value="\n".join([f"• {m.display_name}" for m in team1]) if team1 else "なし",
             inline=True
         )
         
         embed.add_field(
             name="🔵 チーム2",
-            value="\n".join([f"• {m.display_name}" for m in team2]),
+            value="\n".join([f"• {m.display_name}" for m in team2]) if team2 else "なし",
             inline=True
         )
         
@@ -4213,6 +4257,7 @@ async def create_scrim(ctx, args):
     view = CustomGameView()
     message = await ctx.send(embed=embed, view=view)
     scrim_data['message_id'] = message.id
+    view.message = message  # ビューにメッセージオブジェクトを保存
     
     # 自動リマインダー設定（開始時間が指定されている場合）
     if scheduled_time != "未設定" and scheduled_time != "今すぐ":
@@ -4416,6 +4461,40 @@ class RankedRecruitView(discord.ui.View):
     
     def __init__(self, timeout=3600):  # 1時間でタイムアウト
         super().__init__(timeout=timeout)
+        
+    async def on_timeout(self):
+        """タイムアウト時の処理"""
+        try:
+            # ボタンを無効化
+            for item in self.children:
+                item.disabled = True
+            
+            # メッセージを更新してタイムアウトを通知
+            embed = discord.Embed(
+                title="⏰ ランクマッチ募集タイムアウト",
+                description="ボタンの有効期限が切れました。\nコマンドでの操作は引き続き可能です。",
+                color=0xffa500
+            )
+            
+            # メッセージを更新（可能な場合のみ）
+            if hasattr(self, 'message') and self.message:
+                try:
+                    await self.message.edit(view=self, embed=embed)
+                except:
+                    pass  # メッセージ更新に失敗しても継続
+        except Exception as e:
+            print(f"RankedRecruitView タイムアウト処理エラー: {e}")
+            
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """エラーハンドリング"""
+        print(f"RankedRecruitView エラー: {error}")
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 操作中にエラーが発生しました。しばらく待ってから再試行してください。", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ 操作中にエラーが発生しました。しばらく待ってから再試行してください。", ephemeral=True)
+        except:
+            pass  # エラー通知に失敗しても継続
         
     @discord.ui.button(label='参加', emoji='✅', style=discord.ButtonStyle.success)
     async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -5036,6 +5115,7 @@ async def create_ranked_recruit(ctx, args):
     view = RankedRecruitView()
     message = await ctx.send(embed=embed, view=view)
     recruit_data['message_id'] = message.id
+    view.message = message  # ビューにメッセージオブジェクトを保存
     
     # 自動リマインダー設定
     if scheduled_time != "未設定" and scheduled_time != "今すぐ":
