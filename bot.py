@@ -4254,27 +4254,45 @@ class GameToolsPanel(discord.ui.View):
     
     @discord.ui.button(label='🎯 チーム分け', style=discord.ButtonStyle.primary, row=0)
     async def team_divide_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(TeamDivideModal())
+        await interaction.response.defer()
+        
+        # 疑似的なctxオブジェクトを作成（team_divide関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view)
+        
+        pseudo_ctx = PseudoCtx(interaction)
+        
+        # コマンド版と同じteam_divide関数を呼び出し
+        await team_divide(pseudo_ctx, None)
     
     @discord.ui.button(label='🗺️ マップ選択', style=discord.ButtonStyle.success, row=0)
     async def map_select_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        # ランダムマップ選択
-        maps = [
-            'アセント', 'バインド', 'ヘイヴン', 'スプリット', 'アイスボックス',
-            'ブリーズ', 'フラクチャー', 'パール', 'ロータス', 'サンセット'
-        ]
+        # 疑似的なctxオブジェクトを作成（valorant_map_roulette関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view)
         
-        selected_map = random.choice(maps)
+        pseudo_ctx = PseudoCtx(interaction)
         
-        embed = discord.Embed(
-            title="🗺️ 選ばれたマップ",
-            description=f"**{selected_map}**",
-            color=0x00ff88
-        )
-        
-        await interaction.followup.send(embed=embed)
+        # コマンド版と同じvaloranta_map_roulette関数を呼び出し
+        await valorant_map_roulette(pseudo_ctx, 1)
     
     @discord.ui.button(label='📊 統計確認', style=discord.ButtonStyle.secondary, row=0)
     async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -4284,14 +4302,22 @@ class GameToolsPanel(discord.ui.View):
     async def dice_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        result = random.randint(1, 6)
-        embed = discord.Embed(
-            title="🎲 サイコロの結果",
-            description=f"**{result}**",
-            color=0x00aaff
-        )
+        # 疑似的なctxオブジェクトを作成（roll_dice関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view)
         
-        await interaction.followup.send(embed=embed)
+        pseudo_ctx = PseudoCtx(interaction)
+        
+        # コマンド版と同じroll_dice関数を呼び出し
+        await roll_dice(pseudo_ctx, 6)
 
 class RankManagementPanel(discord.ui.View):
     """ランク管理パネル"""
@@ -4307,70 +4333,43 @@ class RankManagementPanel(discord.ui.View):
     async def rank_show_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        user_id = interaction.user.id
-        if user_id not in user_ranks:
-            await interaction.followup.send("❌ ランクが設定されていません。", ephemeral=True)
-            return
+        # 疑似的なctxオブジェクトを作成（rank_system関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        user_rank_data = user_ranks[user_id]
-        current_rank = user_rank_data.get('current')
-        peak_rank = user_rank_data.get('peak')
+        pseudo_ctx = PseudoCtx(interaction)
         
-        embed = discord.Embed(
-            title="🏆 あなたのランク情報",
-            color=0xffd700
-        )
-        
-        if current_rank:
-            rank_info = VALORANT_RANKS[current_rank]
-            embed.add_field(
-                name="📊 現在のランク",
-                value=f"**{rank_info['display']}**",
-                inline=True
-            )
-        
-        if peak_rank:
-            peak_info = VALORANT_RANKS[peak_rank]
-            embed.add_field(
-                name="🎯 最高ランク",
-                value=f"**{peak_info['display']}**",
-                inline=True
-            )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じrank_system関数を呼び出し（show）
+        await rank_system(pseudo_ctx, "show")
     
     @discord.ui.button(label='📋 ランク一覧', style=discord.ButtonStyle.secondary)
     async def rank_list_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        embed = discord.Embed(
-            title="🏆 VALORANTランク一覧",
-            color=0xffd700
-        )
+        # 疑似的なctxオブジェクトを作成（rank_list関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        tier_groups = {}
-        for rank_key, rank_info in VALORANT_RANKS.items():
-            tier = rank_info['tier']
-            if tier not in tier_groups:
-                tier_groups[tier] = []
-            tier_groups[tier].append(rank_info['display'])
+        pseudo_ctx = PseudoCtx(interaction)
         
-        tier_names = {
-            9: "🔴 レディアント", 8: "💜 イモータル", 7: "🔺 アセンダント",
-            6: "💎 ダイヤモンド", 5: "⚪ プラチナ", 4: "🟡 ゴールド",
-            3: "⚫ シルバー", 2: "🟤 ブロンズ", 1: "⚫ アイアン"
-        }
-        
-        for tier in sorted(tier_groups.keys(), reverse=True):
-            tier_name = tier_names.get(tier, f"ティア {tier}")
-            ranks = tier_groups[tier]
-            embed.add_field(
-                name=tier_name,
-                value=" • ".join(ranks),
-                inline=False
-            )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じrank_list関数を呼び出し
+        await rank_list(pseudo_ctx)
 
 class AIToolsPanel(discord.ui.View):
     """AI機能パネル"""
@@ -4400,84 +4399,64 @@ class InfoStatsPanel(discord.ui.View):
     async def server_info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        guild = interaction.guild
-        embed = discord.Embed(
-            title="🏠 サーバー情報",
-            color=0x00aaff
-        )
+        # 疑似的なctxオブジェクトを作成（server_info関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        embed.add_field(
-            name="📊 基本情報",
-            value=f"**サーバー名:** {guild.name}\n"
-                  f"**メンバー数:** {guild.member_count}人\n"
-                  f"**作成日:** {guild.created_at.strftime('%Y/%m/%d')}",
-            inline=True
-        )
+        pseudo_ctx = PseudoCtx(interaction)
         
-        embed.add_field(
-            name="📱 チャンネル数",
-            value=f"**テキスト:** {len(guild.text_channels)}個\n"
-                  f"**ボイス:** {len(guild.voice_channels)}個\n"
-                  f"**カテゴリ:** {len(guild.categories)}個",
-            inline=True
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じserver_info関数を呼び出し
+        await server_info(pseudo_ctx)
     
     @discord.ui.button(label='👤 ユーザー情報', style=discord.ButtonStyle.success, row=0)
     async def user_info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        user = interaction.user
-        embed = discord.Embed(
-            title="👤 あなたの情報",
-            color=0x00ff88
-        )
+        # 疑似的なctxオブジェクトを作成（user_info関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        embed.add_field(
-            name="📊 基本情報",
-            value=f"**ユーザー名:** {user.display_name}\n"
-                  f"**アカウント名:** {user.name}\n"
-                  f"**ID:** {user.id}",
-            inline=True
-        )
+        pseudo_ctx = PseudoCtx(interaction)
         
-        embed.add_field(
-            name="📅 日付",
-            value=f"**参加日:** {user.joined_at.strftime('%Y/%m/%d') if user.joined_at else '不明'}\n"
-                  f"**アカウント作成:** {user.created_at.strftime('%Y/%m/%d')}",
-            inline=True
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じuser_info関数を呼び出し
+        await user_info(pseudo_ctx, interaction.user)
     
     @discord.ui.button(label='🤖 Bot状態', style=discord.ButtonStyle.secondary, row=0)
     async def bot_status_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        embed = discord.Embed(
-            title="🤖 Bot状態情報",
-            color=0x666666
-        )
+        # 疑似的なctxオブジェクトを作成（bot_status関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        import psutil
-        memory_usage = psutil.virtual_memory()
+        pseudo_ctx = PseudoCtx(interaction)
         
-        embed.add_field(
-            name="💾 メモリ使用量",
-            value=f"{memory_usage.percent}% 使用中",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="📊 活動状況",
-            value=f"**カスタムゲーム:** {len(active_scrims)}件\n"
-                  f"**ランク募集:** {len(active_rank_recruits)}件\n"
-                  f"**トーナメント:** {len(active_tournaments)}件",
-            inline=True
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じbot_status関数を呼び出し
+        await bot_status(pseudo_ctx)
 
 class AdminToolsPanel(discord.ui.View):
     """管理機能パネル"""
@@ -4489,90 +4468,53 @@ class AdminToolsPanel(discord.ui.View):
     async def cleanup_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        cleanup_memory()
+        # 疑似的なctxオブジェクトを作成（manual_cleanup関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        embed = discord.Embed(
-            title="🧹 メモリクリーンアップ完了",
-            description="不要なデータを削除しました",
-            color=0x00ff88
-        )
+        pseudo_ctx = PseudoCtx(interaction)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じmanual_cleanup関数を呼び出し
+        await manual_cleanup(pseudo_ctx)
     
     @discord.ui.button(label='📊 使用量確認', style=discord.ButtonStyle.primary)
     async def usage_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
-        embed = discord.Embed(
-            title="📊 AI使用量情報",
-            color=0x00aaff
-        )
+        # 疑似的なctxオブジェクトを作成（show_usage関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        embed.add_field(
-            name="💬 会話履歴",
-            value=f"保存中: {len(conversation_history)}チャンネル",
-            inline=True
-        )
+        pseudo_ctx = PseudoCtx(interaction)
         
-        embed.add_field(
-            name="🎮 活動状況",
-            value=f"カスタム: {len(active_scrims)}\n"
-                  f"ランク: {len(active_rank_recruits)}\n"
-                  f"トーナメント: {len(active_tournaments)}",
-            inline=True
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じshow_usage関数を呼び出し
+        await show_usage(pseudo_ctx)
 
-# 追加のモーダルクラス
-
-class TeamDivideModal(discord.ui.Modal, title='🎯 チーム分け'):
-    def __init__(self):
-        super().__init__()
-    
-    format_type = discord.ui.TextInput(
-        label='チーム分け形式',
-        placeholder='例: 5v5, 3v3, 2v2, または空白で自動',
-        required=False,
-        max_length=10
-    )
-    
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        
-        # 既存のteam_divide関数のロジックを呼び出し
-        format_str = self.format_type.value.strip() if self.format_type.value else None
-        
-        # 簡易的なチーム分け実装
-        voice_channel = interaction.user.voice.channel if interaction.user.voice else None
-        if voice_channel:
-            members = [member for member in voice_channel.members if not member.bot]
-        else:
-            # ランダムでサーバーのアクティブメンバーを選択（デモ用）
-            members = [interaction.user]
-        
-        if len(members) < 2:
-            await interaction.followup.send("❌ チーム分けするメンバーが不足しています。", ephemeral=True)
-            return
-        
-        random.shuffle(members)
-        team_size = len(members) // 2
-        team1 = members[:team_size]
-        team2 = members[team_size:team_size*2]
-        
-        embed = discord.Embed(title="🎯 チーム分け結果", color=0x00ff88)
-        embed.add_field(name="🔴 チーム1", value="\n".join([f"• {m.display_name}" for m in team1]), inline=True)
-        embed.add_field(name="🔵 チーム2", value="\n".join([f"• {m.display_name}" for m in team2]), inline=True)
-        
-        await interaction.followup.send(embed=embed)
-
+# ===== モーダルクラス =====
+# 統計確認モーダル（VALORANT統計とユーザー統計の両方に対応）
 class StatsModal(discord.ui.Modal, title='📊 統計確認'):
     def __init__(self):
         super().__init__()
     
     riot_id = discord.ui.TextInput(
         label='Riot ID',
-        placeholder='例: PlayerName#1234',
+        placeholder='例: PlayerName#1234（空白で自分のDiscord統計）',
         required=False,
         max_length=50
     )
@@ -4581,23 +4523,39 @@ class StatsModal(discord.ui.Modal, title='📊 統計確認'):
         await interaction.response.defer()
         
         if self.riot_id.value:
-            # VALORANT統計取得のロジック（既存の関数を簡易化）
-            embed = discord.Embed(
-                title="📊 VALORANT統計",
-                description=f"**{self.riot_id.value}** の統計情報",
-                color=0x00aaff
-            )
-            embed.add_field(name="📝 注意", value="統計取得機能は開発中です", inline=False)
+            # 疑似的なctxオブジェクトを作成（valorant_stats関数用）
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+            
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            # コマンド版と同じvalorant_stats関数を呼び出し
+            await valorant_stats(pseudo_ctx, riot_id=self.riot_id.value)
         else:
-            # 自分の統計表示
-            embed = discord.Embed(
-                title="📊 あなたの統計",
-                description="Discord上での活動統計",
-                color=0x00aaff
-            )
-            embed.add_field(name="👤 ユーザー", value=interaction.user.display_name, inline=True)
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            # 疑似的なctxオブジェクトを作成（show_member_stats関数用）
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+            
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            # コマンド版と同じshow_member_stats関数を呼び出し
+            await show_member_stats(pseudo_ctx, interaction.user)
 
 class RankSetModal(discord.ui.Modal, title='📝 ランク設定'):
     def __init__(self):
@@ -4667,28 +4625,22 @@ class AIChatModal(discord.ui.Modal, title='💬 AI会話'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        # レート制限チェック
-        if not check_rate_limit(interaction.user.id):
-            await interaction.followup.send(
-                "⏰ レート制限に達しました。しばらく待ってから再試行してください。",
-                ephemeral=True
-            )
-            return
+        # 疑似的なctxオブジェクトを作成（ask_ai関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view)
         
-        try:
-            # AI応答の生成（既存のask_ai関数のロジックを簡略化）
-            response = "AI機能は一時的に無効です。後でもう一度お試しください。"
-            
-            embed = discord.Embed(
-                title="🤖 AI応答",
-                description=response,
-                color=0x00aaff
-            )
-            
-            await interaction.followup.send(embed=embed)
-            
-        except Exception as e:
-            await interaction.followup.send(f"❌ エラーが発生しました: {str(e)}", ephemeral=True)
+        pseudo_ctx = PseudoCtx(interaction)
+        
+        # コマンド版と同じask_ai関数を呼び出し
+        await ask_ai(pseudo_ctx, question=self.question.value)
 
 class TranslateModal(discord.ui.Modal, title='🌍 翻訳'):
     def __init__(self):
@@ -4704,19 +4656,22 @@ class TranslateModal(discord.ui.Modal, title='🌍 翻訳'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        embed = discord.Embed(
-            title="🌍 翻訳結果",
-            description="翻訳機能は開発中です",
-            color=0x00ff88
-        )
+        # 疑似的なctxオブジェクトを作成（translate_text関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        embed.add_field(
-            name="📝 元のテキスト",
-            value=self.text.value,
-            inline=False
-        )
+        pseudo_ctx = PseudoCtx(interaction)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じtranslate_text関数を呼び出し
+        await translate_text(pseudo_ctx, text=self.text.value)
 
 class SummarizeModal(discord.ui.Modal, title='📝 要約'):
     def __init__(self):
@@ -4732,19 +4687,22 @@ class SummarizeModal(discord.ui.Modal, title='📝 要約'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        embed = discord.Embed(
-            title="📝 要約結果",
-            description="要約機能は開発中です",
-            color=0x00aaff
-        )
+        # 疑似的なctxオブジェクトを作成（summarize_text関数用）
+        class PseudoCtx:
+            def __init__(self, interaction):
+                self.channel = interaction.channel
+                self.author = interaction.user
+                self.guild = interaction.guild
+                self._interaction = interaction
+                self.send = self._send_wrapper
+            
+            async def _send_wrapper(self, content=None, embed=None, view=None):
+                await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
         
-        embed.add_field(
-            name="📄 元のテキスト",
-            value=self.text.value[:200] + "..." if len(self.text.value) > 200 else self.text.value,
-            inline=False
-        )
+        pseudo_ctx = PseudoCtx(interaction)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # コマンド版と同じsummarize_text関数を呼び出し
+        await summarize_text(pseudo_ctx, text=self.text.value)
 
 class CustomGameModal(discord.ui.Modal, title='🎯 カスタムゲーム募集作成'):
     """カスタムゲーム募集作成モーダル"""
