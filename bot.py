@@ -4269,7 +4269,18 @@ class GameToolsPanel(discord.ui.View):
                     self.id = interaction.id
                 
                 async def _send_wrapper(self, content=None, embed=None, view=None):
-                    await self._interaction.followup.send(content=content, embed=embed, view=view)
+                    try:
+                        await self._interaction.followup.send(content=content, embed=embed, view=view)
+                    except Exception as e:
+                        print(f"チーム分けボタンの送信エラー: {e}")
+                        # フォールバック：エフェメラルメッセージで送信
+                        try:
+                            await self._interaction.followup.send(
+                                content="⚠️ 一時的なエラーが発生しました。",
+                                ephemeral=True
+                            )
+                        except:
+                            pass
             
             pseudo_ctx = PseudoCtx(interaction)
             
@@ -4286,24 +4297,50 @@ class GameToolsPanel(discord.ui.View):
     
     @discord.ui.button(label='🗺️ マップ選択', style=discord.ButtonStyle.success, row=0)
     async def map_select_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        
-        # 疑似的なctxオブジェクトを作成（valorant_map_roulette関数用）
-        class PseudoCtx:
-            def __init__(self, interaction):
-                self.channel = interaction.channel
-                self.author = interaction.user
-                self.guild = interaction.guild
-                self._interaction = interaction
-                self.send = self._send_wrapper
+        try:
+            await interaction.response.defer()
             
-            async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view)
-        
-        pseudo_ctx = PseudoCtx(interaction)
-        
-        # コマンド版と同じvaloranta_map_roulette関数を呼び出し
-        await valorant_map_roulette(pseudo_ctx, 1)
+            # 疑似的なctxオブジェクトを作成（valorant_map_roulette関数用）
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                    # prevent_duplicate_executionデコレータ用の属性追加
+                    self.id = interaction.id
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    try:
+                        await self._interaction.followup.send(content=content, embed=embed, view=view)
+                    except Exception as e:
+                        print(f"マップ選択ボタンの送信エラー: {e}")
+                        # フォールバック：エフェメラルメッセージで送信
+                        try:
+                            await self._interaction.followup.send(
+                                content="⚠️ 一時的なエラーが発生しました。",
+                                ephemeral=True
+                            )
+                        except:
+                            pass
+            
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            # コマンド版と同じvaloranta_map_roulette関数を呼び出し
+            await valorant_map_roulette(pseudo_ctx, 1)
+            
+        except Exception as e:
+            print(f"マップ選択ボタンエラー: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ マップ選択でエラーが発生しました。", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ マップ選択でエラーが発生しました。", ephemeral=True)
+            except:
+                pass
     
     @discord.ui.button(label='📊 統計確認', style=discord.ButtonStyle.secondary, row=0)
     async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -4311,24 +4348,50 @@ class GameToolsPanel(discord.ui.View):
     
     @discord.ui.button(label='🎲 サイコロ', style=discord.ButtonStyle.primary, row=1)
     async def dice_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        
-        # 疑似的なctxオブジェクトを作成（roll_dice関数用）
-        class PseudoCtx:
-            def __init__(self, interaction):
-                self.channel = interaction.channel
-                self.author = interaction.user
-                self.guild = interaction.guild
-                self._interaction = interaction
-                self.send = self._send_wrapper
+        try:
+            await interaction.response.defer()
             
-            async def _send_wrapper(self, content=None, embed=None, view=None):
-                await self._interaction.followup.send(content=content, embed=embed, view=view)
-        
-        pseudo_ctx = PseudoCtx(interaction)
-        
-        # コマンド版と同じroll_dice関数を呼び出し
-        await roll_dice(pseudo_ctx, 6)
+            # 疑似的なctxオブジェクトを作成（roll_dice関数用）
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                    # prevent_duplicate_executionデコレータ用の属性追加
+                    self.id = interaction.id
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    try:
+                        await self._interaction.followup.send(content=content, embed=embed, view=view)
+                    except Exception as e:
+                        print(f"サイコロボタンの送信エラー: {e}")
+                        # フォールバック：エフェメラルメッセージで送信
+                        try:
+                            await self._interaction.followup.send(
+                                content="⚠️ 一時的なエラーが発生しました。",
+                                ephemeral=True
+                            )
+                        except:
+                            pass
+            
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            # コマンド版と同じroll_dice関数を呼び出し
+            await roll_dice(pseudo_ctx, 6)
+            
+        except Exception as e:
+            print(f"サイコロボタンエラー: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ サイコロでエラーが発生しました。", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ サイコロでエラーが発生しました。", ephemeral=True)
+            except:
+                pass
 
 class RankManagementPanel(discord.ui.View):
     """ランク管理パネル"""
