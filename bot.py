@@ -4472,17 +4472,17 @@ class MainControlPanel(discord.ui.View):
     
     @discord.ui.button(label='🎲 ゲーム便利機能', style=discord.ButtonStyle.success, row=0)
     async def game_tools_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """ゲーム機能パネル - チーム分け・マップ選択・統計などの便利機能"""
+        """ゲーム機能パネル - チーム分け・ランクバランス・マップ選択・統計などの便利機能"""
         view = GameToolsPanel()
         embed = discord.Embed(
             title="🎲 ゲーム便利機能パネル",
-            description="**VALORANTプレイに役立つ機能が満載**",
+            description="**VALORANTプレイに役立つ機能が満載** • ランクバランス機能を新搭載",
             color=0x57f287
         )
         
         embed.add_field(
             name="🎯 チーム分け機能",
-            value="・VC内メンバー自動チーム分け\n・ランクバランス調整\n・2v2〜5v5まで対応",
+            value="・通常チーム分け（ランダム）\n・ランクバランス調整\n・VC内メンバー自動チーム分け\n・2v2〜5v5まで対応",
             inline=True
         )
         
@@ -4500,11 +4500,11 @@ class MainControlPanel(discord.ui.View):
         
         embed.add_field(
             name="🎮 使用例",
-            value="`チーム分け` → VC内メンバーを自動で2チームに分割\n`マップ選択` → 今日プレイするマップを決定\n`統計確認` → 自分のVALORANT戦績をチェック",
+            value="`チーム分け` → VC内メンバーをランダムで2チームに分割\n`ランクチーム分け` → ランクバランスを考慮したチーム分け\n`マップ選択` → 今日プレイするマップを決定\n`統計確認` → 自分のVALORANT戦績をチェック",
             inline=False
         )
         
-        embed.set_footer(text="🚀 ゲームをもっと楽しく、もっと便利に！")
+        embed.set_footer(text="🚀 ランクバランス機能追加！ゲームをもっと楽しく、もっと便利に！")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
     @discord.ui.button(label='🏆 VALORANTランク', style=discord.ButtonStyle.secondary, row=0)
@@ -4697,7 +4697,11 @@ class GameToolsPanel(discord.ui.View):
     async def team_divide_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(TeamDivideModal())
     
-    @discord.ui.button(label='🗺️ マップ選択', style=discord.ButtonStyle.success, row=0)
+    @discord.ui.button(label='🏆 ランクチーム分け', style=discord.ButtonStyle.success, row=0)
+    async def rank_team_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(RankTeamModal())
+    
+    @discord.ui.button(label='🗺️ マップ選択', style=discord.ButtonStyle.secondary, row=1)
     async def map_select_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             await interaction.response.defer()
@@ -4738,11 +4742,11 @@ class GameToolsPanel(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(label='📊 統計確認', style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label='📊 統計確認', style=discord.ButtonStyle.primary, row=1)
     async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(StatsModal())
     
-    @discord.ui.button(label='🎲 サイコロ', style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label='🎲 サイコロ', style=discord.ButtonStyle.success, row=1)
     async def dice_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             await interaction.response.defer()
@@ -5035,6 +5039,67 @@ class TeamDivideModal(discord.ui.Modal, title='🎯 チーム分け設定'):
             traceback.print_exc()
             try:
                 await interaction.followup.send(f"❌ チーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
+            except Exception as followup_error:
+                print(f"フォローアップエラー: {followup_error}")
+
+class RankTeamModal(discord.ui.Modal, title='🏆 ランクチーム分け設定'):
+    def __init__(self):
+        super().__init__()
+    
+    rank_type = discord.ui.TextInput(
+        label='ランクタイプ',
+        placeholder='current（現在ランク）または peak（最高ランク）',
+        default='current',
+        max_length=10
+    )
+    
+    format_type = discord.ui.TextInput(
+        label='チーム分け形式',
+        placeholder='1v1, 2v2, 3v3, 2v1, 4v4, 5v5 または auto（自動）',
+        default='auto',
+        max_length=10
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        try:
+            rank_type = self.rank_type.value.lower().strip()
+            format_choice = self.format_type.value.lower().strip()
+            
+            # ランクタイプバリデーション
+            if rank_type not in ['current', 'peak', '現在', '最高']:
+                await interaction.followup.send("❌ ランクタイプは `current`（現在）または `peak`（最高）を指定してください。", ephemeral=True)
+                return
+            
+            # 疑似的なctxオブジェクトを作成
+            class PseudoCtx:
+                def __init__(self, interaction):
+                    self.channel = interaction.channel
+                    self.author = interaction.user
+                    self.guild = interaction.guild
+                    self._interaction = interaction
+                    self.send = self._send_wrapper
+                
+                async def _send_wrapper(self, content=None, embed=None, view=None):
+                    # viewがNoneの場合は除外して送信
+                    if view is None:
+                        await self._interaction.followup.send(content=content, embed=embed)
+                    else:
+                        await self._interaction.followup.send(content=content, embed=embed, view=view)
+            
+            pseudo_ctx = PseudoCtx(interaction)
+            
+            # ランクベースチーム分け関数を呼び出し
+            format_arg = None if format_choice == 'auto' else format_choice
+            await rank_based_team_divide(pseudo_ctx, rank_type, format_arg)
+                
+        except Exception as e:
+            print(f"ランクチーム分けモーダルエラー: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"❌ ランクチーム分けでエラーが発生しました: {str(e)}", ephemeral=True)
             except Exception as followup_error:
                 print(f"フォローアップエラー: {followup_error}")
 
