@@ -5498,6 +5498,164 @@ class ManualAddModal(discord.ui.Modal, title='👥 手動でメンバー追加')
             await interaction.followup.send(f"❌ 手動追加中にエラーが発生しました: {str(e)}", ephemeral=True)
             print(f"手動追加エラー: {e}")
 
+class ManualRemoveModal(discord.ui.Modal, title='👥 手動でメンバー削除'):
+    """手動削除用のモーダル"""
+    
+    def __init__(self, recruit_type="custom"):
+        super().__init__()
+        self.recruit_type = recruit_type  # "custom" or "ranked"
+    
+    member_names = discord.ui.TextInput(
+        label='削除するメンバー',
+        placeholder='例: @ユーザー名1 @ユーザー名2 または ユーザー名1 ユーザー名2',
+        style=discord.TextStyle.paragraph,
+        min_length=1,
+        max_length=500
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer()
+            
+            channel_id = interaction.channel.id
+            user_id = interaction.user.id
+            
+            # 募集タイプに応じて適切なデータを取得
+            if self.recruit_type == "custom":
+                if channel_id not in active_scrims:
+                    await interaction.followup.send("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+                    return
+                recruit_data = active_scrims[channel_id]
+            else:  # ranked
+                if channel_id not in active_rank_recruits:
+                    await interaction.followup.send("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+                    return
+                recruit_data = active_rank_recruits[channel_id]
+            
+            # 権限チェック
+            if user_id != recruit_data['creator'].id and not interaction.user.guild_permissions.manage_messages:
+                await interaction.followup.send("❌ 募集の作成者または管理者のみメンバーを削除できます。", ephemeral=True)
+                return
+            
+            # 入力されたテキストからユーザーを抽出
+            input_text = self.member_names.value.strip()
+            mentioned_users = []
+            
+            # @メンション形式の処理
+            import re
+            mention_pattern = r'<@!?(\d+)>'
+            mention_matches = re.findall(mention_pattern, input_text)
+            for user_id_str in mention_matches:
+                try:
+                    member = interaction.guild.get_member(int(user_id_str))
+                    if member:
+                        mentioned_users.append(member)
+                except ValueError:
+                    pass
+            
+            # 通常のユーザー名での検索も実装
+            if not mentioned_users:
+                # スペースまたは改行で分割
+                user_names = re.split(r'[\s\n]+', input_text)
+                for name in user_names:
+                    name = name.strip().replace('@', '')  # @を削除
+                    if name:
+                        # 部分一致でユーザーを検索（参加者の中から）
+                        for participant_id in recruit_data['participants']:
+                            member = interaction.guild.get_member(participant_id)
+                            if member and (name.lower() in member.display_name.lower() or name.lower() in member.name.lower()):
+                                if member not in mentioned_users:
+                                    mentioned_users.append(member)
+                                    break
+            
+            if not mentioned_users:
+                await interaction.followup.send("❌ 有効なユーザーが見つかりませんでした。\n"
+                                                "💡 `@ユーザー名` または `ユーザー名` の形式で入力してください。", ephemeral=True)
+                return
+            
+            # 削除処理
+            removed_users = []
+            not_participating = []
+            creator_protection = []
+            
+            for member in mentioned_users:
+                if member.id not in recruit_data['participants']:
+                    not_participating.append(member.display_name)
+                elif member.id == recruit_data['creator'].id and len(recruit_data['participants']) > 1:
+                    # 作成者は他の参加者がいる間は削除不可
+                    creator_protection.append(member.display_name)
+                else:
+                    # 削除処理
+                    recruit_data['participants'].remove(member.id)
+                    removed_users.append(member.display_name)
+                    
+                    # ステータス更新
+                    recruit_data['status'] = 'recruiting'
+            
+            # 募集メッセージを更新
+            try:
+                if 'message_id' in recruit_data:
+                    channel = interaction.channel
+                    message = await channel.fetch_message(recruit_data['message_id'])
+                    
+                    # 最新の募集情報でembedを再作成
+                    if self.recruit_type == "custom":
+                        updated_embed = await create_custom_embed(recruit_data, interaction.guild)
+                    else:
+                        updated_embed = await create_ranked_embed(recruit_data, interaction.guild)
+                    
+                    # 操作方法を追加（元のメッセージと同じ形式）
+                    updated_embed.add_field(
+                        name="🔧 操作方法",
+                        value="**ボタン操作:** 下のボタンをクリック\n"
+                              f"**コマンド操作:** `!{'custom' if self.recruit_type == 'custom' else 'ranked'} join/leave/status`",
+                        inline=False
+                    )
+                    
+                    # ランクマッチの場合はランク詳細も追加
+                    if self.recruit_type == "ranked" and (recruit_data.get('min_rank') or recruit_data.get('max_rank')):
+                        rank_details = []
+                        if recruit_data.get('min_rank'):
+                            rank_details.append(f"最低ランク: {VALORANT_RANKS[recruit_data['min_rank']]['display']}")
+                        if recruit_data.get('max_rank'):
+                            rank_details.append(f"最高ランク: {VALORANT_RANKS[recruit_data['max_rank']]['display']}")
+                        
+                        updated_embed.add_field(
+                            name="🎯 ランク詳細",
+                            value="\n".join(rank_details),
+                            inline=False
+                        )
+                    
+                    # メッセージを更新（ボタンは維持）
+                    await message.edit(embed=updated_embed)
+            except:
+                pass  # メッセージ更新に失敗した場合はスキップ
+            
+            # 結果メッセージの作成
+            result_messages = []
+            
+            if removed_users:
+                result_messages.append(f"✅ **削除完了:** {', '.join(removed_users)}")
+            
+            if not_participating:
+                result_messages.append(f"⚠️ **参加していません:** {', '.join(not_participating)}")
+            
+            if creator_protection:
+                result_messages.append(f"🛡️ **作成者保護:** {', '.join(creator_protection)} (他の参加者がいる間は削除不可)")
+            
+            if result_messages:
+                current_count = len(recruit_data['participants'])
+                status_text = f"📊 現在 {current_count}/{recruit_data['max_players']}人"
+                
+                final_message = "\n".join(result_messages) + f"\n{status_text}"
+                await interaction.followup.send(final_message, ephemeral=False)
+            else:
+                await interaction.followup.send("ℹ️ 処理するユーザーがありませんでした。", ephemeral=True)
+                
+        except Exception as e:
+            await interaction.followup.send(f"❌ 手動削除中にエラーが発生しました: {str(e)}", ephemeral=True)
+            print(f"手動削除エラー: {e}")
+
 class CustomGameModal(discord.ui.Modal, title='🎯 カスタムゲーム募集作成'):
     """カスタムゲーム募集作成モーダル"""
     
@@ -6215,6 +6373,44 @@ class CustomGameView(discord.ui.View):
             except:
                 pass
             print(f"手動追加ボタンエラー: {e}")
+    
+    @discord.ui.button(label='手動削除', emoji='➖', style=discord.ButtonStyle.danger)
+    async def manual_remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """手動削除ボタン（作成者・管理者のみ）"""
+        try:
+            channel_id = interaction.channel.id
+            user_id = interaction.user.id
+            
+            if channel_id not in active_scrims:
+                await interaction.response.send_message("❌ アクティブなカスタムゲームがありません。", ephemeral=True)
+                return
+            
+            scrim = active_scrims[channel_id]
+            
+            # 権限チェック
+            if user_id != scrim['creator'].id and not interaction.user.guild_permissions.manage_messages:
+                await interaction.response.send_message("❌ カスタムゲームの作成者または管理者のみメンバーを削除できます。", ephemeral=True)
+                return
+            
+            # 参加者がいるかチェック（作成者以外）
+            other_participants = [p for p in scrim['participants'] if p != scrim['creator'].id]
+            if not other_participants:
+                await interaction.response.send_message("❌ 削除可能な参加者がいません。", ephemeral=True)
+                return
+            
+            # 手動削除モーダルを表示
+            modal = ManualRemoveModal(recruit_type="custom")
+            await interaction.response.send_modal(modal)
+                
+        except Exception as e:
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ 手動削除ボタンでエラーが発生しました: {str(e)}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ 手動削除ボタンでエラーが発生しました: {str(e)}", ephemeral=True)
+            except:
+                pass
+            print(f"手動削除ボタンエラー: {e}")
 
 async def create_custom_embed(scrim, guild):
     """カスタムゲーム募集のEmbed作成"""
@@ -6923,6 +7119,44 @@ class RankedRecruitView(discord.ui.View):
             except:
                 pass
             print(f"手動追加ボタンエラー: {e}")
+    
+    @discord.ui.button(label='手動削除', emoji='➖', style=discord.ButtonStyle.danger)
+    async def manual_remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """手動削除ボタン（作成者・管理者のみ）"""
+        try:
+            channel_id = interaction.channel.id
+            user_id = interaction.user.id
+            
+            if channel_id not in active_rank_recruits:
+                await interaction.response.send_message("❌ アクティブなランクマッチ募集がありません。", ephemeral=True)
+                return
+            
+            recruit = active_rank_recruits[channel_id]
+            
+            # 権限チェック
+            if user_id != recruit['creator'].id and not interaction.user.guild_permissions.manage_messages:
+                await interaction.response.send_message("❌ ランクマッチ募集の作成者または管理者のみメンバーを削除できます。", ephemeral=True)
+                return
+            
+            # 参加者がいるかチェック（作成者以外）
+            other_participants = [p for p in recruit['participants'] if p != recruit['creator'].id]
+            if not other_participants:
+                await interaction.response.send_message("❌ 削除可能な参加者がいません。", ephemeral=True)
+                return
+            
+            # 手動削除モーダルを表示
+            modal = ManualRemoveModal(recruit_type="ranked")
+            await interaction.response.send_modal(modal)
+                
+        except Exception as e:
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ 手動削除ボタンでエラーが発生しました: {str(e)}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ 手動削除ボタンでエラーが発生しました: {str(e)}", ephemeral=True)
+            except:
+                pass
+            print(f"手動削除ボタンエラー: {e}")
 
 async def create_ranked_embed(recruit, guild):
     """ランクマッチ募集のEmbed作成"""
