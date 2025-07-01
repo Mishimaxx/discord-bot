@@ -3239,28 +3239,37 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 color=display_color
             )
             
-            # 現在ランクと最高ランクを並列表示
-            rank_fields = []
-            
+            # 現在ランクと最高ランクを表示
             if current_rank:
                 current_info = VALORANT_RANKS[current_rank]
-                rank_fields.append(("📊 現在ランク", f"**{current_info['display']}**"))
+                embed.add_field(
+                    name="📊 現在ランク",
+                    value=f"**{current_info['display']}**",
+                    inline=True
+                )
             else:
-                rank_fields.append(("📊 現在ランク", "未設定"))
+                embed.add_field(
+                    name="📊 現在ランク",
+                    value="未設定",
+                    inline=True
+                )
             
             if peak_rank:
                 peak_info = VALORANT_RANKS[peak_rank]
-                rank_fields.append(("🏆 最高ランク", f"**{peak_info['display']}**"))
-            else:
-                rank_fields.append(("🏆 最高ランク", "未設定"))
-            
-            # ランク情報を横並びで表示
-            for i, (name, value) in enumerate(rank_fields):
                 embed.add_field(
-                    name=name,
-                    value=value,
+                    name="🏆 最高ランク",
+                    value=f"**{peak_info['display']}**",
                     inline=True
                 )
+            else:
+                embed.add_field(
+                    name="🏆 最高ランク",
+                    value="未設定",
+                    inline=True
+                )
+            
+            # 空のフィールドで改行
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
             
             # 最終更新日時
             if "updated" in user_data:
@@ -3270,24 +3279,32 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                     inline=False
                 )
             
-            # 画像表示の最適化
-            # 現在ランクと最高ランクの両方がある場合
+            # 画像設定：現在ランクを優先してメイン画像に、最高ランクが異なる場合はサムネイルに
             if current_rank and peak_rank and current_rank != peak_rank:
-                # サムネイル：現在ランク、メイン画像：最高ランク
-                if 'image_url' in VALORANT_RANKS[current_rank]:
-                    embed.set_thumbnail(url=VALORANT_RANKS[current_rank]['image_url'])
-                if 'image_url' in VALORANT_RANKS[peak_rank]:
-                    embed.set_image(url=VALORANT_RANKS[peak_rank]['image_url'])
-            # 現在ランクのみある場合
+                # 現在ランクをメイン画像、最高ランクをサムネイルに表示
+                current_info = VALORANT_RANKS[current_rank]
+                peak_info = VALORANT_RANKS[peak_rank]
+                
+                if 'image_url' in current_info:
+                    embed.set_image(url=current_info['image_url'])
+                if 'image_url' in peak_info:
+                    embed.set_thumbnail(url=peak_info['image_url'])
+                    
             elif current_rank:
-                if 'image_url' in VALORANT_RANKS[current_rank]:
-                    embed.set_thumbnail(url=VALORANT_RANKS[current_rank]['image_url'])
-            # 最高ランクのみある場合
+                # 現在ランクのみの場合
+                current_info = VALORANT_RANKS[current_rank]
+                if 'image_url' in current_info:
+                    embed.set_image(url=current_info['image_url'])
+                    embed.set_thumbnail(url=target_user.display_avatar.url)
+                    
             elif peak_rank:
-                if 'image_url' in VALORANT_RANKS[peak_rank]:
-                    embed.set_thumbnail(url=VALORANT_RANKS[peak_rank]['image_url'])
-            # どちらもない場合はユーザーアバター
+                # 最高ランクのみの場合
+                peak_info = VALORANT_RANKS[peak_rank]
+                if 'image_url' in peak_info:
+                    embed.set_image(url=peak_info['image_url'])
+                    embed.set_thumbnail(url=target_user.display_avatar.url)
             else:
+                # どちらもない場合
                 embed.set_thumbnail(url=target_user.display_avatar.url)
             await ctx.send(embed=embed)
             
