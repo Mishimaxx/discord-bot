@@ -4694,35 +4694,60 @@ class RankSetModal(discord.ui.Modal, title='📝 ランク設定'):
             
             print(f"Debug Modal: rank_type={rank_type}, rank_input='{rank_input}'")  # デバッグ情報
             
-            if rank_type not in ['current', 'peak']:
-                await interaction.followup.send("❌ ランクタイプは 'current' または 'peak' を指定してください。", ephemeral=True)
+            if rank_type not in ['current', 'peak', '現在', '最高']:
+                await interaction.followup.send("❌ ランクタイプは 'current'（現在）または 'peak'（最高）を指定してください。", ephemeral=True)
                 return
             
-            # ランク解析
-            parsed_rank = parse_rank_input(rank_input)
-            print(f"Debug Modal: parsed_rank={parsed_rank}")  # デバッグ情報
+            # ランク解析（コマンド版と同じ処理）
+            try:
+                parsed_rank = parse_rank_input(rank_input)
+                print(f"Debug Modal: parsed_rank={parsed_rank}")  # デバッグ情報
+            except Exception as e:
+                print(f"モーダルランクパースエラー: {e}")
+                await interaction.followup.send(f"❌ ランクパース中にエラーが発生しました: {str(e)}", ephemeral=True)
+                return
             
             if not parsed_rank:
-                await interaction.followup.send(f"❌ 無効なランク形式です。\n入力された値: `{rank_input}`\n例: ダイヤ2, プラチナ3, イモータル1", ephemeral=True)
+                rank_list = ", ".join(list(VALORANT_RANKS.keys())[:10]) + "..."
+                await interaction.followup.send(f"❌ 無効なランクです。\n入力された値: `{rank_input if rank_input else 'なし'}`\n利用可能なランク例: {rank_list}", ephemeral=True)
                 return
         
-            # ユーザーランクデータの初期化
+            # ユーザーランクデータの初期化（コマンド版と同じ）
             if user_id not in user_ranks:
-                user_ranks[user_id] = {}
+                user_ranks[user_id] = {"current": None, "peak": None, "updated": datetime.now()}
             
-            user_ranks[user_id][rank_type] = parsed_rank
+            # ランクタイプを統一（コマンド版と同じ）
+            rank_type_key = "current" if rank_type.lower() in ["current", "現在"] else "peak"
+            old_rank = user_ranks[user_id].get(rank_type_key)
+            
+            user_ranks[user_id][rank_type_key] = parsed_rank
+            user_ranks[user_id]["updated"] = datetime.now()
+            
             rank_info = VALORANT_RANKS[parsed_rank]
+            type_display = "現在ランク" if rank_type_key == "current" else "最高ランク"
             
+            # コマンド版と同じEmbedを作成
             embed = discord.Embed(
                 title="✅ ランク設定完了",
-                color=0x00ff88
+                description=f"{type_display}を **{rank_info['display']}** に設定しました",
+                color=rank_info['color']
             )
             
-            embed.add_field(
-                name=f"📊 {rank_type.title()}ランク",
-                value=f"**{rank_info['display']}**",
-                inline=True
-            )
+            # ランク画像を表示（コマンド版と同じ）
+            if 'image_url' in rank_info:
+                embed.set_thumbnail(url=rank_info['image_url'])
+            
+            # 変更履歴を表示（コマンド版と同じ）
+            if old_rank and old_rank != parsed_rank:
+                old_info = VALORANT_RANKS[old_rank]
+                embed.add_field(
+                    name="📈 変更",
+                    value=f"{old_info['display']} → {rank_info['display']}",
+                    inline=False
+                )
+            
+            # フッターを追加（コマンド版と同じ）
+            embed.set_footer(text=f"更新者: {interaction.user.display_name}")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
             
