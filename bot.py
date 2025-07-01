@@ -3279,16 +3279,16 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                     inline=False
                 )
             
-            # 画像設定：現在ランクを優先してメイン画像に、最高ランクが異なる場合はサムネイルに
+            # 画像設定：最高ランクを優先してメイン画像に、現在ランクが異なる場合はサムネイルに
             if current_rank and peak_rank and current_rank != peak_rank:
-                # 現在ランクをメイン画像、最高ランクをサムネイルに表示
+                # 最高ランクをメイン画像、現在ランクをサムネイルに表示
                 current_info = VALORANT_RANKS[current_rank]
                 peak_info = VALORANT_RANKS[peak_rank]
                 
-                if 'image_url' in current_info:
-                    embed.set_image(url=current_info['image_url'])
                 if 'image_url' in peak_info:
-                    embed.set_thumbnail(url=peak_info['image_url'])
+                    embed.set_image(url=peak_info['image_url'])
+                if 'image_url' in current_info:
+                    embed.set_thumbnail(url=current_info['image_url'])
                     
             elif current_rank:
                 # 現在ランクのみの場合
@@ -4394,9 +4394,9 @@ class RankManagementPanel(discord.ui.View):
             async def _send_wrapper(self, content=None, embed=None, view=None):
                 # viewがNoneの場合は除外して送信
                 if view is None:
-                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=False)
                 else:
-                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=False)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4419,9 +4419,9 @@ class RankManagementPanel(discord.ui.View):
             async def _send_wrapper(self, content=None, embed=None, view=None):
                 # viewがNoneの場合は除外して送信
                 if view is None:
-                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=True)
+                    await self._interaction.followup.send(content=content, embed=embed, ephemeral=False)
                 else:
-                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=True)
+                    await self._interaction.followup.send(content=content, embed=embed, view=view, ephemeral=False)
         
         pseudo_ctx = PseudoCtx(interaction)
         
@@ -4719,7 +4719,7 @@ class RankSetModal(discord.ui.Modal, title='📝 ランク設定'):
             print(f"Debug Modal: rank_type={rank_type}, rank_input='{rank_input}'")  # デバッグ情報
             
             if rank_type not in ['current', 'peak', '現在', '最高']:
-                await interaction.followup.send("❌ ランクタイプは 'current'（現在）または 'peak'（最高）を指定してください。", ephemeral=True)
+                await interaction.followup.send("❌ ランクタイプは 'current'（現在）または 'peak'（最高）を指定してください。", ephemeral=False)
                 return
             
             # ランク解析（コマンド版と同じ処理）
@@ -4728,12 +4728,12 @@ class RankSetModal(discord.ui.Modal, title='📝 ランク設定'):
                 print(f"Debug Modal: parsed_rank={parsed_rank}")  # デバッグ情報
             except Exception as e:
                 print(f"モーダルランクパースエラー: {e}")
-                await interaction.followup.send(f"❌ ランクパース中にエラーが発生しました: {str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ ランクパース中にエラーが発生しました: {str(e)}", ephemeral=False)
                 return
             
             if not parsed_rank:
                 rank_list = ", ".join(list(VALORANT_RANKS.keys())[:10]) + "..."
-                await interaction.followup.send(f"❌ 無効なランクです。\n入力された値: `{rank_input if rank_input else 'なし'}`\n利用可能なランク例: {rank_list}", ephemeral=True)
+                await interaction.followup.send(f"❌ 無効なランクです。\n入力された値: `{rank_input if rank_input else 'なし'}`\n利用可能なランク例: {rank_list}", ephemeral=False)
                 return
         
             # ユーザーランクデータの初期化（コマンド版と同じ）
@@ -4773,13 +4773,13 @@ class RankSetModal(discord.ui.Modal, title='📝 ランク設定'):
             # フッターを追加（コマンド版と同じ）
             embed.set_footer(text=f"更新者: {interaction.user.display_name}")
             
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=False)
             
         except Exception as e:
             print(f"RankSetModal エラー: {e}")
             import traceback
             traceback.print_exc()
-            await interaction.followup.send(f"❌ ランク設定中にエラーが発生しました: {str(e)}", ephemeral=True)
+            await interaction.followup.send(f"❌ ランク設定中にエラーが発生しました: {str(e)}", ephemeral=False)
 
 class AIChatModal(discord.ui.Modal, title='💬 AI会話'):
     def __init__(self):
