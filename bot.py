@@ -3522,51 +3522,133 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
 @bot.command(name='ranklist', aliases=['ranks'], help='利用可能なVALORANTランク一覧を表示します')
 @prevent_duplicate_execution
 async def rank_list(ctx):
-    """利用可能なランク一覧表示"""
+    """利用可能なランク一覧表示 - ティア別に見やすく整理"""
     try:
         embed = discord.Embed(
-            title="🎯 VALORANT ランク一覧",
-            description="設定可能なランク（上位から順番）",
+            title="🏆 VALORANT ランク一覧",
+            description="**全ランク設定可能** - ティア別に整理された完全版",
             color=0xff4655
         )
+        
+        # ティア別にランクを整理
+        tier_names = {
+            9: {"name": "レディアント", "emoji": "👑", "color": "🟡"},
+            8: {"name": "イモータル", "emoji": "💎", "color": "🟣"},
+            7: {"name": "アセンダント", "emoji": "🌟", "color": "🔵"},
+            6: {"name": "ダイヤモンド", "emoji": "💠", "color": "💎"},
+            5: {"name": "プラチナ", "emoji": "⚡", "color": "🟦"},
+            4: {"name": "ゴールド", "emoji": "⭐", "color": "🟨"},
+            3: {"name": "シルバー", "emoji": "🔘", "color": "⚪"},
+            2: {"name": "ブロンズ", "emoji": "🟫", "color": "🟫"},
+            1: {"name": "アイアン", "emoji": "⚫", "color": "⚫"}
+        }
         
         # ランクを価値順にソート
         sorted_ranks = sorted(VALORANT_RANKS.items(), key=lambda x: x[1]['value'], reverse=True)
         
-        rank_display = []
-        current_tier = None
-        
+        # ティア別にグループ化
+        tiers = {}
         for rank_key, rank_info in sorted_ranks:
-            if current_tier != rank_info['tier']:
-                if rank_display:  # 前のティアがある場合は改行追加
-                    rank_display.append("")
-                current_tier = rank_info['tier']
+            tier = rank_info['tier']
+            if tier not in tiers:
+                tiers[tier] = []
+            tiers[tier].append((rank_key, rank_info))
+        
+        # 上位ティアから表示（見やすい配置）
+        tier_groups = []
+        for tier in sorted(tiers.keys(), reverse=True):
+            tier_info = tier_names.get(tier, {"name": f"ティア{tier}", "emoji": "🔸", "color": "⚪"})
+            tier_ranks = tiers[tier]
             
-            rank_display.append(rank_info['display'])
+            # ティア内のランク一覧を作成
+            rank_list = []
+            for rank_key, rank_info in tier_ranks:
+                # 略語を生成（例：ダイヤモンド1 → dia1）
+                shorthand = rank_key.lower()
+                # 特殊なケースの略語
+                if 'radiant' in rank_key.lower():
+                    shorthand = 'rad'
+                elif 'immortal' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('immortal', 'imm')
+                elif 'ascendant' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('ascendant', 'asc')
+                elif 'diamond' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('diamond', 'dia')
+                elif 'platinum' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('platinum', 'plat')
+                elif 'gold' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('gold', 'gold')
+                elif 'silver' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('silver', 'sil')
+                elif 'bronze' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('bronze', 'br')
+                elif 'iron' in rank_key.lower():
+                    shorthand = rank_key.lower().replace('iron', 'ir')
+                
+                rank_list.append(f"{tier_info['color']} **{rank_info['display']}** (`{shorthand}`)")
+            
+            tier_groups.append({
+                'name': f"{tier_info['emoji']} {tier_info['name']}",
+                'value': "\n".join(rank_list)
+            })
         
-        # 3つのフィールドに分けて表示
-        chunks = [rank_display[i:i+9] for i in range(0, len(rank_display), 9)]
+        # ティアを3つずつのグループに分けて表示（Discordの3列レイアウトを活用）
+        for i in range(0, len(tier_groups), 3):
+            group = tier_groups[i:i+3]
+            for tier_data in group:
+                embed.add_field(
+                    name=tier_data['name'],
+                    value=tier_data['value'],
+                    inline=True
+                )
+            
+            # 3つ未満の場合はスペーサーを追加
+            while len(group) < 3:
+                embed.add_field(name="", value="", inline=True)
+                group.append({"name": "", "value": ""})
         
-        for i, chunk in enumerate(chunks):
-            field_name = f"🏆 ランク一覧 {i+1}" if len(chunks) > 1 else "🏆 ランク一覧"
-            embed.add_field(
-                name=field_name,
-                value="\n".join(chunk),
-                inline=True
-            )
-        
+        # 使用方法を詳しく説明
         embed.add_field(
-            name="📝 使用方法",
-            value="`!rank set current ダイヤ2`\n`!rank set peak レディアント`",
+            name="📝 設定方法",
+            value=(
+                "**現在ランク設定:**\n"
+                "`!rank set current ダイヤ2`\n"
+                "`!rank set current dia2`\n\n"
+                "**最高ランク設定:**\n"
+                "`!rank set peak レディアント`\n"
+                "`!rank set peak rad`"
+            ),
             inline=False
         )
         
-        embed.set_footer(text="略語も使用可能: imm3, dia1, plat2, gold3など")
+        embed.add_field(
+            name="🎯 便利な機能",
+            value=(
+                "• **ランク確認:** `!rank show` または `!rank show @ユーザー`\n"
+                "• **ランクチーム分け:** `!rank_team` でバランス調整\n"
+                "• **ランクマッチ募集:** `!ranked create` で条件付き募集"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💡 使用例",
+            value=(
+                "**正式名称:** `ダイヤモンド1`, `プラチナ3`, `レディアント`\n"
+                "**略語:** `dia1`, `plat3`, `rad`, `imm2`, `asc1`\n"
+                "**自然語:** `ダイヤ1`, `プラチナ3`, `レディアント`"
+            ),
+            inline=False
+        )
+        
+        embed.set_footer(text="💎 ランクを設定してもっと楽しくVALORANTをプレイしよう！ | 全27ランク対応")
         
         await ctx.send(embed=embed)
         
     except Exception as e:
         print(f"ランク一覧エラー: {e}")
+        import traceback
+        traceback.print_exc()
         await ctx.send("❌ ランク一覧の表示でエラーが発生しました。")
 
 # Render.com Web Service対応のHTTPサーバー
