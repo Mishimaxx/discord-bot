@@ -3531,11 +3531,11 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
 @bot.command(name='ranklist', aliases=['ranks'], help='利用可能なVALORANTランク一覧を表示します')
 @prevent_duplicate_execution
 async def rank_list(ctx):
-    """利用可能なランク一覧表示 - 画像リンク付きで見やすく整理"""
+    """利用可能なランク一覧表示 - 絵文字付きで見やすく整理"""
     try:
         embed = discord.Embed(
             title="🏆 VALORANT ランク一覧",
-            description="**全27ランク対応** • 設定可能なランクと超短縮形（画像クリックで拡大表示）",
+            description="**全27ランク対応** • 設定可能なランクと超短縮形",
             color=0xff4655
         )
         
@@ -3563,13 +3563,13 @@ async def rank_list(ctx):
                 tiers[tier] = []
             tiers[tier].append((rank_key, rank_info))
         
-        # 上位ティアから表示（画像リンク付き）
+        # 上位ティアから表示（絵文字付き）
         tier_groups = []
         for tier in sorted(tiers.keys(), reverse=True):
             tier_info = tier_names.get(tier, {"name": f"ティア{tier}", "emoji": "🔸", "color": "⚪"})
             tier_ranks = tiers[tier]
             
-            # ティア内のランク一覧を作成（画像リンク＋超短縮形付き）
+            # ティア内のランク一覧を作成（絵文字＋超短縮形付き）
             rank_list = []
             for rank_key, rank_info in tier_ranks:
                 # 超短縮形の生成
@@ -3594,11 +3594,8 @@ async def rank_list(ctx):
                 else:
                     shorthand = rank_key.lower()
                 
-                # 画像リンク付きの表示
-                if 'image_url' in rank_info:
-                    rank_list.append(f"{tier_info['color']} **[{rank_info['display']}]({rank_info['image_url']})** (`{shorthand}`)")
-                else:
-                    rank_list.append(f"{tier_info['color']} **{rank_info['display']}** (`{shorthand}`)")
+                # 絵文字付きの表示
+                rank_list.append(f"{tier_info['color']} **{rank_info['display']}** (`{shorthand}`)")
             
             tier_groups.append({
                 'name': f"{tier_info['emoji']} {tier_info['name']}",
@@ -3653,11 +3650,7 @@ async def rank_list(ctx):
             inline=False
         )
         
-        # サムネイルに代表的なランク画像を設定（レディアント）
-        if 'image_url' in VALORANT_RANKS["レディアント"]:
-            embed.set_thumbnail(url=VALORANT_RANKS["レディアント"]["image_url"])
-        
-        embed.set_footer(text="💎 画像をクリックして各ランクを詳しく見てみよう！ | パネルUI: !panel → VALORANTランク")
+        embed.set_footer(text="💎 ランクを設定してもっと楽しくVALORANTをプレイしよう！ | パネルUI: !panel → VALORANTランク")
         
         await ctx.send(embed=embed)
         
