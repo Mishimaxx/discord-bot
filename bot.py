@@ -3239,50 +3239,27 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 color=display_color
             )
             
-            # 現在ランクの表示（画像を下に配置）
+            # 現在ランクと最高ランクを並列表示
+            rank_fields = []
+            
             if current_rank:
                 current_info = VALORANT_RANKS[current_rank]
-                current_value = f"**{current_info['display']}**"
-                embed.add_field(
-                    name="📊 現在ランク",
-                    value=current_value,
-                    inline=False
-                )
-                # 現在ランクの画像を下に配置
-                if 'image_url' in current_info:
-                    embed.add_field(
-                        name="🖼️ 現在ランク画像",
-                        value=f"[画像リンク]({current_info['image_url']})",
-                        inline=False
-                    )
+                rank_fields.append(("📊 現在ランク", f"**{current_info['display']}**"))
             else:
-                embed.add_field(
-                    name="📊 現在ランク",
-                    value="未設定",
-                    inline=False
-                )
+                rank_fields.append(("📊 現在ランク", "未設定"))
             
-            # 最高ランクの表示（画像を下に配置）
             if peak_rank:
                 peak_info = VALORANT_RANKS[peak_rank]
-                peak_value = f"**{peak_info['display']}**"
-                embed.add_field(
-                    name="🏆 最高ランク",
-                    value=peak_value,
-                    inline=False
-                )
-                # 最高ランクの画像を下に配置
-                if 'image_url' in peak_info:
-                    embed.add_field(
-                        name="🖼️ 最高ランク画像",
-                        value=f"[画像リンク]({peak_info['image_url']})",
-                        inline=False
-                    )
+                rank_fields.append(("🏆 最高ランク", f"**{peak_info['display']}**"))
             else:
+                rank_fields.append(("🏆 最高ランク", "未設定"))
+            
+            # ランク情報を横並びで表示
+            for i, (name, value) in enumerate(rank_fields):
                 embed.add_field(
-                    name="🏆 最高ランク",
-                    value="未設定",
-                    inline=False
+                    name=name,
+                    value=value,
+                    inline=True
                 )
             
             # 最終更新日時
@@ -3293,19 +3270,25 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                     inline=False
                 )
             
-            # 画像設定の最適化
-            # サムネイル：現在ランクを優先、なければ最高ランク、どちらもなければユーザーアバター
-            if current_rank and 'image_url' in VALORANT_RANKS[current_rank]:
-                embed.set_thumbnail(url=VALORANT_RANKS[current_rank]['image_url'])
-            elif peak_rank and 'image_url' in VALORANT_RANKS[peak_rank]:
-                embed.set_thumbnail(url=VALORANT_RANKS[peak_rank]['image_url'])
+            # 画像表示の最適化
+            # 現在ランクと最高ランクの両方がある場合
+            if current_rank and peak_rank and current_rank != peak_rank:
+                # サムネイル：現在ランク、メイン画像：最高ランク
+                if 'image_url' in VALORANT_RANKS[current_rank]:
+                    embed.set_thumbnail(url=VALORANT_RANKS[current_rank]['image_url'])
+                if 'image_url' in VALORANT_RANKS[peak_rank]:
+                    embed.set_image(url=VALORANT_RANKS[peak_rank]['image_url'])
+            # 現在ランクのみある場合
+            elif current_rank:
+                if 'image_url' in VALORANT_RANKS[current_rank]:
+                    embed.set_thumbnail(url=VALORANT_RANKS[current_rank]['image_url'])
+            # 最高ランクのみある場合
+            elif peak_rank:
+                if 'image_url' in VALORANT_RANKS[peak_rank]:
+                    embed.set_thumbnail(url=VALORANT_RANKS[peak_rank]['image_url'])
+            # どちらもない場合はユーザーアバター
             else:
                 embed.set_thumbnail(url=target_user.display_avatar.url)
-            
-            # メイン画像：最高ランクがあって現在ランクと異なる場合に設定
-            if peak_rank and 'image_url' in VALORANT_RANKS[peak_rank]:
-                if not current_rank or peak_rank != current_rank:
-                    embed.set_image(url=VALORANT_RANKS[peak_rank]['image_url'])
             await ctx.send(embed=embed)
             
         elif action.lower() == "list" or action.lower() == "ranking":
