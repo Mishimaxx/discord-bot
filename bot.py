@@ -3033,16 +3033,30 @@ user_ranks = {}  # {user_id: {"current": "rank", "peak": "rank", "updated": date
 
 def parse_rank_input(rank_input):
     """ランク入力をパース"""
+    # rank_inputが文字列でない場合の処理
+    if isinstance(rank_input, (list, tuple)):
+        if len(rank_input) == 0:
+            return None
+        rank_input = " ".join(str(x) for x in rank_input)
+    elif not isinstance(rank_input, str):
+        rank_input = str(rank_input)
+    
     rank_input = rank_input.strip()
+    
+    if not rank_input:
+        return None
     
     # 前処理：スペース削除、全角数字を半角に変換
     rank_input = rank_input.replace(" ", "").replace("　", "")  # 半角・全角スペース削除
     rank_input = rank_input.replace("１", "1").replace("２", "2").replace("３", "3")  # 全角数字変換
     rank_input = rank_input.replace("ダイヤモンド", "ダイヤ")  # 「ダイヤモンド」→「ダイヤ」変換
     
+    print(f"Debug parse_rank_input: 処理中のランク入力 = '{rank_input}'")  # デバッグ情報
+    
     # 完全一致チェック
     for rank_key in VALORANT_RANKS.keys():
         if rank_input.lower() == rank_key.lower():
+            print(f"Debug parse_rank_input: 完全一致 = {rank_key}")  # デバッグ情報
             return rank_key
     
     # 部分一致チェック（ランク名のみ）
@@ -3081,13 +3095,19 @@ def parse_rank_input(rank_input):
                 # 数字を抽出
                 for i in range(3, 0, -1):
                     if str(i) in rank_input:
-                        return ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
+                        result = ranks[3-i]  # 3->0, 2->1, 1->2のインデックス
+                        print(f"Debug parse_rank_input: 数字付きランク一致 = {result}")  # デバッグ情報
+                        return result
                 # 数字がない場合は最高ランク（3）
-                return ranks[0]
+                result = ranks[0]
+                print(f"Debug parse_rank_input: 数字なしランク（最高）= {result}")  # デバッグ情報
+                return result
         else:
             if rank_input.lower().startswith(base_name.lower()):
+                print(f"Debug parse_rank_input: 単一ランク一致 = {ranks}")  # デバッグ情報
                 return ranks
     
+    print(f"Debug parse_rank_input: 一致なし")  # デバッグ情報
     return None
 
 @bot.command(name='rank', help='VALORANTランクを管理します（例: !rank set current ダイヤ2, !rank show）')
@@ -3134,15 +3154,18 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 await ctx.send("❌ ランクタイプは `current`（現在）または `peak`（最高）を指定してください")
                 return
             
-            # rank_inputをtupleから文字列に変換
-            rank_input_str = " ".join(rank_input) if rank_input else ""
-            
-            # ランクをパース
-            parsed_rank = parse_rank_input(rank_input_str)
+            # ランクをパース（rank_inputはタプルなのでparse_rank_input関数内で処理）
+            try:
+                parsed_rank = parse_rank_input(rank_input)
+                print(f"Debug: rank_input={rank_input}, parsed_rank={parsed_rank}")  # デバッグ情報
+            except Exception as e:
+                print(f"ランクパースエラー: {e}")
+                await ctx.send(f"❌ ランクパース中にエラーが発生しました: {str(e)}")
+                return
             
             if not parsed_rank:
                 rank_list = ", ".join(list(VALORANT_RANKS.keys())[:10]) + "..."
-                await ctx.send(f"❌ 無効なランクです。利用可能なランク: {rank_list}")
+                await ctx.send(f"❌ 無効なランクです。\n入力された値: `{' '.join(rank_input) if rank_input else 'なし'}`\n利用可能なランク例: {rank_list}")
                 return
             
             user_id = ctx.author.id
@@ -3261,7 +3284,7 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
             embed.set_thumbnail(url=target_user.display_avatar.url)
             await ctx.send(embed=embed)
             
-        elif action.lower() == "list":
+        elif action.lower() == "list" or action.lower() == "ranking":
             # サーバー内ランキング表示
             guild_members = [member.id for member in ctx.guild.members if not member.bot]
             ranked_users = []
@@ -4664,39 +4687,50 @@ class RankSetModal(discord.ui.Modal, title='📝 ランク設定'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        user_id = interaction.user.id
-        rank_type = self.rank_type.value.lower()
-        rank_input = self.rank_value.value
+        try:
+            user_id = interaction.user.id
+            rank_type = self.rank_type.value.lower()
+            rank_input = self.rank_value.value
+            
+            print(f"Debug Modal: rank_type={rank_type}, rank_input='{rank_input}'")  # デバッグ情報
+            
+            if rank_type not in ['current', 'peak']:
+                await interaction.followup.send("❌ ランクタイプは 'current' または 'peak' を指定してください。", ephemeral=True)
+                return
+            
+            # ランク解析
+            parsed_rank = parse_rank_input(rank_input)
+            print(f"Debug Modal: parsed_rank={parsed_rank}")  # デバッグ情報
+            
+            if not parsed_rank:
+                await interaction.followup.send(f"❌ 無効なランク形式です。\n入力された値: `{rank_input}`\n例: ダイヤ2, プラチナ3, イモータル1", ephemeral=True)
+                return
         
-        if rank_type not in ['current', 'peak']:
-            await interaction.followup.send("❌ ランクタイプは 'current' または 'peak' を指定してください。", ephemeral=True)
-            return
-        
-        # ランク解析
-        parsed_rank = parse_rank_input([rank_input])
-        if not parsed_rank:
-            await interaction.followup.send("❌ 無効なランク形式です。例: ダイヤ2, プラチナ3", ephemeral=True)
-            return
-        
-        # ユーザーランクデータの初期化
-        if user_id not in user_ranks:
-            user_ranks[user_id] = {}
-        
-        user_ranks[user_id][rank_type] = parsed_rank
-        rank_info = VALORANT_RANKS[parsed_rank]
-        
-        embed = discord.Embed(
-            title="✅ ランク設定完了",
-            color=0x00ff88
-        )
-        
-        embed.add_field(
-            name=f"📊 {rank_type.title()}ランク",
-            value=f"**{rank_info['display']}**",
-            inline=True
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            # ユーザーランクデータの初期化
+            if user_id not in user_ranks:
+                user_ranks[user_id] = {}
+            
+            user_ranks[user_id][rank_type] = parsed_rank
+            rank_info = VALORANT_RANKS[parsed_rank]
+            
+            embed = discord.Embed(
+                title="✅ ランク設定完了",
+                color=0x00ff88
+            )
+            
+            embed.add_field(
+                name=f"📊 {rank_type.title()}ランク",
+                value=f"**{rank_info['display']}**",
+                inline=True
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            print(f"RankSetModal エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            await interaction.followup.send(f"❌ ランク設定中にエラーが発生しました: {str(e)}", ephemeral=True)
 
 class AIChatModal(discord.ui.Modal, title='💬 AI会話'):
     def __init__(self):
