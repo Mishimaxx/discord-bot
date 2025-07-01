@@ -3239,37 +3239,54 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                 color=display_color
             )
             
-            # メインランクの画像を表示（現在ランク優先、なければピークランク）
-            main_rank = current_rank if current_rank else peak_rank
-            if main_rank and 'image_url' in VALORANT_RANKS[main_rank]:
-                embed.set_image(url=VALORANT_RANKS[main_rank]['image_url'])
-            
+            # 現在ランクの表示（画像を下に配置）
             if current_rank:
                 current_info = VALORANT_RANKS[current_rank]
+                current_value = f"**{current_info['display']}**"
                 embed.add_field(
                     name="📊 現在ランク",
-                    value=current_info['display'],
-                    inline=True
+                    value=current_value,
+                    inline=False
                 )
+                # 現在ランクの画像を下に配置
+                if 'image_url' in current_info:
+                    embed.add_field(
+                        name="🖼️ 現在ランク画像",
+                        value=f"[画像リンク]({current_info['image_url']})",
+                        inline=False
+                    )
+                    # サムネイルとしても設定
+                    embed.set_thumbnail(url=current_info['image_url'])
             else:
                 embed.add_field(
                     name="📊 現在ランク",
                     value="未設定",
-                    inline=True
+                    inline=False
                 )
             
+            # 最高ランクの表示（画像を下に配置）
             if peak_rank:
                 peak_info = VALORANT_RANKS[peak_rank]
+                peak_value = f"**{peak_info['display']}**"
                 embed.add_field(
                     name="🏆 最高ランク",
-                    value=peak_info['display'],
-                    inline=True
+                    value=peak_value,
+                    inline=False
                 )
+                # 最高ランクの画像を下に配置
+                if 'image_url' in peak_info:
+                    embed.add_field(
+                        name="🖼️ 最高ランク画像",
+                        value=f"[画像リンク]({peak_info['image_url']})",
+                        inline=False
+                    )
+                    # メイン画像としても設定
+                    embed.set_image(url=peak_info['image_url'])
             else:
                 embed.add_field(
                     name="🏆 最高ランク",
                     value="未設定",
-                    inline=True
+                    inline=False
                 )
             
             # 最終更新日時
