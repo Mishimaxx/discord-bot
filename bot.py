@@ -523,178 +523,201 @@ async def ping(ctx):
 @bot.command(name='help', aliases=['commands'], help='利用可能なコマンド一覧を表示')
 @prevent_duplicate_execution
 async def show_commands(ctx):
-    """利用可能なコマンドを表示"""
+    """リオンBotの全機能を美しく表示"""
     
     embed = discord.Embed(
-        title="🤖 リオンBot - コマンド一覧",
-        description="各機能の詳細なコマンド一覧です。カテゴリ別に整理されています。",
-        color=0x2ecc71
+        title="🤖 リオンBot - 完全機能ガイド",
+        description="**VALORANTをもっと楽しく！ゲーム体験を劇的に向上させる全機能をご紹介**",
+        color=0x5865f2
     )
     
-    # 🎯 チーム分けシステム
-    team_commands = [
-        "`!team [形式]` - 自動チーム分け (2v1, 3v3, 5v5など)",
-        "`!qt [形式]` - クイックチーム分け",
-        "`!vc_team [形式]` - VC内メンバーでチーム分け",
-        "`!rank_team [形式]` - ランクバランス調整チーム分け"
-    ]
-    
+    # ヘッダー画像風の説明
     embed.add_field(
-        name="🎯 チーム分けシステム",
-        value="\n".join(team_commands),
+        name="✨ ようこそリオンBotへ！",
+        value="🎮 **メイン機能** → `!panel` でボタンUI操作\n📜 **コマンド一覧** → 下記詳細をご確認ください",
         inline=False
+    )
+    
+    # 🎯 チーム分け・ゲーム機能
+    embed.add_field(
+        name="🎯 チーム分け・ゲーム機能",
+        value=(
+            "**🏃‍♂️ クイックチーム分け**\n"
+            "`!team` `!qt` `!vc_team` - VC内を瞬時に分割\n"
+            "`!rank_team` - ランクバランス自動調整\n\n"
+            
+            "**🗺️ マップ・その他**\n"
+            "`!map` - VALORANTマップルーレット\n"
+            "`!maplist` `!mapinfo [マップ名]` - マップ情報\n"
+            "`!dice` - サイコロ（1-6面）"
+        ),
+        inline=True
     )
     
     # 🏆 ランク管理システム
-    rank_commands = [
-        "`!rank set current [ランク]` - 現在ランクを設定",
-        "`!rank set peak [ランク]` - 最高ランクを設定", 
-        "`!rank show [@ユーザー]` - ランク情報を表示",
-        "`!ranklist` - 設定可能ランク一覧を表示",
-        "`!rank_team` - ランクバランスチーム分け"
-    ]
-    
     embed.add_field(
-        name="🏆 ランク管理システム",
-        value="\n".join(rank_commands),
-        inline=False
-    )
-    
-    # ⚔️ ゲーム募集システム
-    recruit_commands = [
-        "**カスタム募集**",
-        "`!custom create [人数] [時間]` - カスタムゲーム募集開始",
-        "`!custom join/leave/status` - 参加/離脱/状況確認",
-        "`!custom add @ユーザー` - 🆕 メンバー手動追加",
-        "`!custom kick @ユーザー` - メンバー除外",
-        "",
-        "**ランクマッチ募集**", 
-        "`!ranked create [ランク帯] [時間]` - ランク募集開始",
-        "`!ranked join/leave/status/check` - 参加/離脱/状況/ランク確認",
-        "`!ranked add @ユーザー` - 🆕 メンバー手動追加（ランク条件チェック付き）",
-        "`!ranked kick @ユーザー` - メンバー除外"
-    ]
-    
-    embed.add_field(
-        name="⚔️ ゲーム募集システム",
-        value="\n".join(recruit_commands),
-        inline=False
-    )
-    
-    # 🎮 トーナメントシステム  
-    tournament_commands = [
-        "`!tournament create [形式]` - トーナメント作成",
-        "`!tournament join/start/bracket` - 参加/開始/ブラケット表示",
-        "`!tournament result [勝者]` - 試合結果入力",
-        "`!tournament status/next/end` - 状況確認/次の試合/終了"
-    ]
-    
-    embed.add_field(
-        name="🎮 トーナメントシステム",
-        value="\n".join(tournament_commands),
-        inline=False
-    )
-    
-    # 🌐 VALORANT機能
-    valorant_commands = [
-        "`!valorant [RiotID#Tag]` - VALORANT統計表示", 
-        "`!valorant_match [RiotID#Tag]` - 試合履歴表示",
-        "`!map [数]` - マップルーレット",
-        "`!maplist` - 全マップ一覧",
-        "`!mapinfo [マップ名]` - マップ詳細情報"
-    ]
-    
-    embed.add_field(
-        name="🌐 VALORANT機能",
-        value="\n".join(valorant_commands),
-        inline=False
-    )
-    
-    # 🧠 AI機能
-    ai_commands = [
-        "`!ai [質問]` - AI会話",
-        "`!expert [質問]` - 専門的な回答",
-        "`!creative [プロンプト]` - 創作的な回答",
-        "`!translate [テキスト]` - 翻訳",
-        "`!summarize [テキスト]` - 要約"
-    ]
-    
-    embed.add_field(
-        name="🧠 AI機能",
-        value="\n".join(ai_commands),
+        name="🏆 VALORANTランク管理",
+        value=(
+            "**📝 ランク登録**\n"
+            "`!rank set current ダイヤ2` - 現在ランク\n"
+            "`!rank set peak レディアント` - 最高ランク\n\n"
+            
+            "**👀 ランク確認**\n"
+            "`!rank show` - 自分のランク表示\n"
+            "`!rank show @user` - 他人のランク確認\n"
+            "`!ranklist` - 全ランク一覧"
+        ),
         inline=True
     )
     
-    # 📊 情報・統計
-    info_commands = [
-        "`!info` - サーバー情報",
-        "`!members` - メンバー統計",
-        "`!userinfo [@ユーザー]` - ユーザー情報",
-        "`!mystats [@ユーザー]` - メンバー統計",
-        "`!ping` - 応答速度確認"
-    ]
-    
+    # 🎮 ゲーム募集システム
     embed.add_field(
-        name="📊 情報・統計",
-        value="\n".join(info_commands),
+        name="🎮 ゲーム募集システム",
+        value=(
+            "**🎯 カスタムゲーム**\n"
+            "`!custom create 10人 20:00` - 募集開始\n"
+            "`!custom join/leave/status` - 参加管理\n\n"
+            
+            "**🏆 ランクマッチ**\n"
+            "`!ranked create ダイヤ帯 21:00` - ランク募集\n"
+            "`!ranked join/leave/check` - 参加・確認\n\n"
+            
+            "**🏅 トーナメント**\n"
+            "`!tournament create シングル戦` - 大会開催"
+        ),
         inline=True
     )
     
-    # 💡 使用例
-    usage_examples = [
-        "**基本例:**",
-        "`!rank set current ダイヤ2` - ランク設定",
-        "`!custom create 10人 20:00` - カスタム募集",
-        "`!ranked create ダイヤ帯 21:00` - ランク募集",
-        "",
-        "**ランク条件例:**",
-        "`プラチナ以上` `ダイヤ以下` `any`（問わず）",
-        "",
-        "**手動追加例:**",
-        "`!custom add @user1 @user2` - 複数追加可能",
-        "`!ranked add @user1` - ランク条件自動チェック"
-    ]
-    
+    # 🤖 AI・翻訳機能
     embed.add_field(
-        name="💡 使用例",
-        value="\n".join(usage_examples),
+        name="🤖 AI・翻訳機能",
+        value=(
+            "**💬 AI会話**\n"
+            "`!ai VALORANTの上達法は？` - なんでも質問\n"
+            "`!expert 量子コンピュータについて` - 専門回答\n"
+            "`!creative 未来の世界を描いて` - 創作回答\n\n"
+            
+            "**🌍 翻訳・要約**\n"
+            "`!translate Hello world` - 多言語翻訳\n"
+            "`!summarize [長文]` - 要約作成"
+        ),
+        inline=True
+    )
+    
+    # 📊 情報・統計機能
+    embed.add_field(
+        name="📊 情報・統計機能",
+        value=(
+            "**🏠 サーバー情報**\n"
+            "`!info` - サーバー詳細統計\n"
+            "`!members` - メンバー分析\n"
+            "`!channels` - チャンネル一覧\n\n"
+            
+            "**👤 ユーザー情報**\n"
+            "`!userinfo @user` - プロフィール確認\n"
+            "`!mystats` - Discord活動統計\n"
+            "`!ping` - Bot応答速度"
+        ),
+        inline=True
+    )
+    
+    # 🌐 VALORANT統計
+    embed.add_field(
+        name="🌐 VALORANT統計",
+        value=(
+            "**📈 戦績確認**\n"
+            "`!valorant PlayerName#1234` - 統計表示\n"
+            "`!valorant_match PlayerName#1234` - 試合履歴\n\n"
+            
+            "**🎯 活用例**\n"
+            "• 自分の成長を数字で確認\n"
+            "• フレンドと戦績を比較\n"
+            "• ランク上げのモチベーション維持"
+        ),
+        inline=True
+    )
+    
+    # 💡 使用例・コツ
+    embed.add_field(
+        name="💡 実践的な使用例",
+        value=(
+            "**🚀 ゲーム開始までの流れ**\n"
+            "1️⃣ `!rank set current ダイヤ2` - ランク登録\n"
+            "2️⃣ `!ranked create ダイヤ帯 20:00` - 募集作成\n"
+            "3️⃣ みんなが参加 → `!ranked team` - チーム分け\n"
+            "4️⃣ `!map` - 今日のマップ決定 🎯\n\n"
+            
+            "**💬 自然な操作方法**\n"
+            "• `@リオン チーム分けして` - 自然な日本語OK\n"
+            "• `!panel` - ボタンUIで直感的操作\n"
+            "• ボタンクリック → 入力フォーム表示"
+        ),
         inline=False
     )
     
-    # ✨ 特殊機能
-    special_features = [
-        "🎯 **ランクバランス** - 自動でバランス調整されたチーム分け",
-        "🔍 **自動チェック** - 参加時にランク条件を自動確認",
-        "📊 **リアルタイム統計** - 参加者のランク分布と評価",
-        "⏰ **自動リマインダー** - 開始5分前に自動通知",
-        "🖱️ **ボタン操作** - 参加/離脱/チーム分けがワンクリック",
-        "👥 **手動管理** - 作成者による参加者の追加・除外"
-    ]
-    
+    # ✨ 特殊機能・新機能
     embed.add_field(
-        name="✨ 特殊機能",
-        value="\n".join(special_features),
+        name="✨ 特殊機能・新機能",
+        value=(
+            "🎯 **スマートランクバランス** - AIが最適なチーム分けを自動計算\n"
+            "🔍 **参加資格自動チェック** - ランク条件を瞬時に判定\n"
+            "📊 **リアルタイム統計** - 参加者のランク分布をリアルタイム表示\n"
+            "⏰ **自動リマインダー** - 開始5分前に全参加者に通知\n"
+            "🖱️ **ワンクリック操作** - 参加・離脱・チーム分けが超簡単\n"
+            "👥 **メンバー管理** - `!custom add @user1 @user2` で手動追加\n"
+            "🔄 **コマンド/UI両対応** - あなたの好みに合わせて選択可能"
+        ),
         inline=False
     )
     
-    # 💬 その他
-    other_features = [
-        "• **@リオン + メッセージ** - 自然な会話",
-        "• **「チーム分けして」** - 自動チーム分け実行",
-        "• **ボタンUI** - クリックで簡単操作",
-        "• **コマンド/ボタン両対応** - お好みの方法で操作可能"
-    ]
-    
+    # 🎨 便利な操作方法
     embed.add_field(
-        name="💬 その他の機能",
-        value="\n".join(other_features),
-        inline=False
+        name="🎨 便利な操作方法",
+        value=(
+            "**📱 初心者におすすめ**\n"
+            "`!panel` → ボタンをクリック → 簡単操作！\n\n"
+            
+            "**⚡ 上級者向け**\n"
+            "コマンドを直接入力 → 高速操作！\n\n"
+            
+            "**🗣️ 自然な会話**\n"
+            "`@リオン` をつけて普通に話しかけるだけでOK"
+        ),
+        inline=True
+    )
+    
+    # 🛠️ 管理機能（管理者のみ）
+    embed.add_field(
+        name="🛠️ 管理機能（管理者限定）",
+        value=(
+            "`!cleanup` - メモリ最適化\n"
+            "`!usage` - 使用状況確認\n"
+            "`!botstatus` - Bot詳細状態\n"
+            "`!restart` - Bot再起動（緊急時）"
+        ),
+        inline=True
+    )
+    
+    # 📞 サポート・その他
+    embed.add_field(
+        name="📞 サポート・その他",
+        value=(
+            "**🆘 困った時は**\n"
+            "• `!help` - このヘルプを再表示\n"
+            "• `@リオン 使い方がわからない` - AI が説明\n"
+            "• 開発者にDMで問い合わせ\n\n"
+            
+            "**🔗 便利な略語一覧**\n"
+            "`qt` = `quick_team`, `vct` = `vc_team`\n"
+            "`dia2` = `ダイヤ2`, `plat3` = `プラチナ3`"
+        ),
+        inline=True
     )
     
     # フッター情報
     command_count = len(bot.commands)
     embed.set_footer(
-        text=f"📝 登録コマンド数: {command_count}個 | 🆕 最新機能: 手動メンバー追加",
+        text=f"🎮 登録コマンド数: {command_count}個 | 🆕 NEW: スマートランクバランス・手動メンバー管理 | 💝 VALORANTライフをもっと楽しく！",
         icon_url=bot.user.avatar.url if bot.user.avatar else None
     )
     
@@ -3031,6 +3054,121 @@ VALORANT_RANKS = {
 # ユーザーランク情報ストレージ
 user_ranks = {}  # {user_id: {"current": "rank", "peak": "rank", "updated": datetime}}
 
+def parse_datetime_input(time_input):
+    """日付・時間入力をパースしてdatetimeオブジェクトを返す"""
+    if not time_input:
+        return None
+    
+    from datetime import datetime, timedelta
+    import re
+    
+    time_str = time_input.strip()
+    now = datetime.now()
+    
+    # 「今から」「すぐ」
+    if time_str.lower() in ['今から', 'すぐ', 'now', 'いまから']:
+        return now
+    
+    # 「X分後」「X時間後」
+    minute_match = re.search(r'(\d+)分後', time_str)
+    if minute_match:
+        minutes = int(minute_match.group(1))
+        return now + timedelta(minutes=minutes)
+    
+    hour_match = re.search(r'(\d+)時間後', time_str)
+    if hour_match:
+        hours = int(hour_match.group(1))
+        return now + timedelta(hours=hours)
+    
+    # 「明日」「今日」のパターン
+    today_match = re.search(r'今日\s*(\d{1,2}):(\d{2})', time_str)
+    if today_match:
+        hour = int(today_match.group(1))
+        minute = int(today_match.group(2))
+        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target_time <= now:
+            target_time += timedelta(days=1)  # 過去の時間なら明日に
+        return target_time
+    
+    tomorrow_match = re.search(r'明日\s*(\d{1,2}):(\d{2})', time_str)
+    if tomorrow_match:
+        hour = int(tomorrow_match.group(1))
+        minute = int(tomorrow_match.group(2))
+        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0) + timedelta(days=1)
+        return target_time
+    
+    # 「HH:MM」形式（今日の時間）
+    time_only_match = re.search(r'^(\d{1,2}):(\d{2})$', time_str)
+    if time_only_match:
+        hour = int(time_only_match.group(1))
+        minute = int(time_only_match.group(2))
+        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target_time <= now:
+            target_time += timedelta(days=1)  # 過去の時間なら明日に
+        return target_time
+    
+    # 「YYYY/MM/DD HH:MM」形式
+    full_datetime_match = re.search(r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s+(\d{1,2}):(\d{2})', time_str)
+    if full_datetime_match:
+        year = int(full_datetime_match.group(1))
+        month = int(full_datetime_match.group(2))
+        day = int(full_datetime_match.group(3))
+        hour = int(full_datetime_match.group(4))
+        minute = int(full_datetime_match.group(5))
+        return datetime(year, month, day, hour, minute)
+    
+    # 「MM/DD HH:MM」形式
+    date_time_match = re.search(r'(\d{1,2})[/\-](\d{1,2})\s+(\d{1,2}):(\d{2})', time_str)
+    if date_time_match:
+        month = int(date_time_match.group(1))
+        day = int(date_time_match.group(2))
+        hour = int(date_time_match.group(3))
+        minute = int(date_time_match.group(4))
+        year = now.year
+        target_time = datetime(year, month, day, hour, minute)
+        if target_time <= now:
+            target_time = target_time.replace(year=year + 1)  # 過去の日付なら来年に
+        return target_time
+    
+    # 「MM/DD」形式（時間は20:00をデフォルト）
+    date_only_match = re.search(r'^(\d{1,2})[/\-](\d{1,2})$', time_str)
+    if date_only_match:
+        month = int(date_only_match.group(1))
+        day = int(date_only_match.group(2))
+        year = now.year
+        target_time = datetime(year, month, day, 20, 0)  # デフォルト20:00
+        if target_time <= now:
+            target_time = target_time.replace(year=year + 1)  # 過去の日付なら来年に
+        return target_time
+    
+    # パースできない場合はNone
+    return None
+
+def format_datetime_display(dt):
+    """datetimeオブジェクトを分かりやすい文字列に変換"""
+    if not dt:
+        return "未設定"
+    
+    now = datetime.now()
+    
+    # 今日の場合
+    if dt.date() == now.date():
+        return f"今日 {dt.strftime('%H:%M')}"
+    
+    # 明日の場合
+    if dt.date() == (now + timedelta(days=1)).date():
+        return f"明日 {dt.strftime('%H:%M')}"
+    
+    # 1週間以内の場合は曜日表示
+    days_diff = (dt.date() - now.date()).days
+    if 0 < days_diff <= 7:
+        weekdays = ['月', '火', '水', '木', '金', '土', '日']
+        weekday = weekdays[dt.weekday()]
+        return f"{dt.month}/{dt.day}({weekday}) {dt.strftime('%H:%M')}"
+    
+    # それ以外は日付形式
+    return dt.strftime('%Y/%m/%d %H:%M')
+
 def parse_rank_input(rank_input):
     """ランク入力をパース"""
     # rank_inputが文字列でない場合の処理
@@ -4165,6 +4303,7 @@ async def create_tournament_embed(tournament, guild):
               f"**最大人数:** {max_participants}人\n"
               f"**最小開始人数:** 4人\n"
               f"**現在の参加者:** {current_count}/{max_participants}人\n"
+              f"**開始予定:** {tournament.get('scheduled_time', '未設定')}\n"
               f"**ステータス:** {status_map.get(tournament['status'], tournament['status'])}",
         inline=True
     )
@@ -4198,79 +4337,245 @@ async def create_tournament_embed(tournament, guild):
 # ===============================
 
 class MainControlPanel(discord.ui.View):
-    """メイン機能コントロールパネル"""
+    """メイン機能コントロールパネル - リオンBotの中核機能にアクセス"""
     
     def __init__(self):
         super().__init__(timeout=None)  # 永続的なパネル
     
-    @discord.ui.button(label='🎯 ゲーム募集', style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label='🎮 ゲーム募集作成', style=discord.ButtonStyle.primary, row=0)
     async def game_recruit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """ゲーム募集パネル"""
+        """ゲーム募集パネル - カスタム・ランクマッチ・トーナメント募集を簡単作成"""
         view = GameRecruitPanel()
         embed = discord.Embed(
-            title="🎮 ゲーム募集パネル",
-            description="各種ゲーム募集を作成できます",
-            color=0x00aaff
+            title="🎮 ゲーム募集作成パネル",
+            description="**ワンクリックで各種ゲーム募集を作成できます**",
+            color=0x5865f2
         )
+        
+        embed.add_field(
+            name="🎯 カスタムゲーム募集",
+            value="・アンレート、カジュアル向け\n・参加/離脱がボタンで簡単\n・自動チーム分け機能付き",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🏆 ランクマッチ募集",
+            value="・ランク条件付き募集\n・参加時に自動ランクチェック\n・ランクバランス調整可能",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🏅 トーナメント作成",
+            value="・本格的なトーナメント戦\n・ブラケット自動生成\n・試合結果管理機能",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="✨ 共通機能",
+            value="• **ボタンUI** - 参加/離脱がワンクリック\n• **自動通知** - 開始5分前リマインダー\n• **メンバー管理** - 手動追加・除外可能",
+            inline=False
+        )
+        
+        embed.set_footer(text="💡 各ボタンを押すと入力フォームが表示されます")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @discord.ui.button(label='🎲 ゲーム機能', style=discord.ButtonStyle.success, row=0)
+    @discord.ui.button(label='🎲 ゲーム便利機能', style=discord.ButtonStyle.success, row=0)
     async def game_tools_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """ゲーム機能パネル"""
+        """ゲーム機能パネル - チーム分け・マップ選択・統計などの便利機能"""
         view = GameToolsPanel()
         embed = discord.Embed(
-            title="🎲 ゲーム機能パネル",
-            description="チーム分け、マップ選択、統計などの機能",
-            color=0x00ff88
+            title="🎲 ゲーム便利機能パネル",
+            description="**VALORANTプレイに役立つ機能が満載**",
+            color=0x57f287
         )
+        
+        embed.add_field(
+            name="🎯 チーム分け機能",
+            value="・VC内メンバー自動チーム分け\n・ランクバランス調整\n・2v2〜5v5まで対応",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🗺️ マップルーレット",
+            value="・全13マップからランダム選択\n・マップ詳細情報表示\n・サイト情報も確認可能",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📊 統計・その他",
+            value="・VALORANT統計確認\n・Discord活動統計\n・6面サイコロ機能",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎮 使用例",
+            value="`チーム分け` → VC内メンバーを自動で2チームに分割\n`マップ選択` → 今日プレイするマップを決定\n`統計確認` → 自分のVALORANT戦績をチェック",
+            inline=False
+        )
+        
+        embed.set_footer(text="🚀 ゲームをもっと楽しく、もっと便利に！")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @discord.ui.button(label='🏆 ランク管理', style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label='🏆 VALORANTランク', style=discord.ButtonStyle.secondary, row=0)
     async def rank_management_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """ランク管理パネル"""
+        """ランク管理パネル - VALORANTランクの設定・確認・管理"""
         view = RankManagementPanel()
         embed = discord.Embed(
-            title="🏆 ランク管理パネル",
-            description="VALORANTランクの設定と確認",
-            color=0xffd700
+            title="🏆 VALORANTランク管理",
+            description="**あなたのVALORANTランクを登録・管理できます**",
+            color=0xfee75c
         )
+        
+        embed.add_field(
+            name="📝 ランク設定",
+            value="・現在ランクを設定\n・最高ランク（ピーク）を設定\n・アイアン〜レディアントまで対応",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="👀 ランク確認",
+            value="・自分のランク表示\n・他のメンバーのランク確認\n・ランク画像付きで見やすく",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📋 ランク一覧",
+            value="・設定可能な全ランク表示\n・略語対応（dia2, plat3など）\n・ランク画像も確認可能",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎯 活用方法",
+            value="• **ランクマッチ募集** - 条件にマッチする人のみ参加可能\n• **チーム分け** - ランクバランスを自動調整\n• **統計表示** - サーバー内ランキング表示",
+            inline=False
+        )
+        
+        embed.set_footer(text="🏅 ランクを設定してもっと楽しくVALORANTをプレイしよう！")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @discord.ui.button(label='🤖 AI機能', style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label='🤖 AI・翻訳機能', style=discord.ButtonStyle.danger, row=1)
     async def ai_tools_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """AI機能パネル"""
+        """AI機能パネル - 高性能AI会話・翻訳・要約機能"""
         view = AIToolsPanel()
         embed = discord.Embed(
-            title="🤖 AI機能パネル",
-            description="AI会話、翻訳、要約などの機能",
-            color=0xff6b6b
+            title="🤖 AI・翻訳機能パネル",
+            description="**Gemini AIを活用した高性能機能**",
+            color=0xed4245
         )
+        
+        embed.add_field(
+            name="💬 AI会話",
+            value="・自然な会話が可能\n・質問・相談なんでもOK\n・日本語で丁寧に回答",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🌍 翻訳機能",
+            value="・多言語対応翻訳\n・英語⇔日本語が得意\n・自然で読みやすい翻訳",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📝 要約機能",
+            value="・長文を短く要約\n・重要ポイントを抽出\n・分かりやすい文章に変換",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎯 使用例",
+            value="`AI会話` → VALORANTの攻略法を質問\n`翻訳` → 海外フレンドとのやり取りを翻訳\n`要約` → 長いニュース記事を要約",
+            inline=False
+        )
+        
+        embed.set_footer(text="🧠 AIパワーでコミュニケーションをもっとスムーズに！")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @discord.ui.button(label='📊 情報・統計', style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label='📊 情報・統計表示', style=discord.ButtonStyle.primary, row=1)
     async def info_stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """情報・統計パネル"""
+        """情報・統計パネル - サーバー・ユーザー・Botの詳細情報"""
         view = InfoStatsPanel()
         embed = discord.Embed(
-            title="📊 情報・統計パネル",
-            description="サーバー情報、ユーザー統計、Bot状態",
-            color=0x4a90e2
+            title="📊 情報・統計表示パネル",
+            description="**サーバーとメンバーの詳細情報を確認**",
+            color=0x5865f2
         )
+        
+        embed.add_field(
+            name="🏠 サーバー情報",
+            value="・メンバー数・オンライン状況\n・チャンネル数・ロール数\n・作成日・ブースト状況",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="👤 ユーザー情報",
+            value="・アカウント作成日\n・サーバー参加日\n・アバター・プロフィール",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🤖 Bot状態",
+            value="・応答速度・稼働時間\n・メモリ使用量\n・機能利用状況",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📈 活用方法",
+            value="• **サーバー管理** - メンバーの活動状況を把握\n• **統計分析** - 人気機能や利用傾向を確認\n• **トラブル解決** - Bot状態を確認して問題を特定",
+            inline=False
+        )
+        
+        embed.set_footer(text="📊 データで見るサーバーの今を確認しよう！")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @discord.ui.button(label='⚙️ 管理機能', style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label='⚙️ 管理者機能', style=discord.ButtonStyle.secondary, row=1)
     async def admin_tools_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """管理機能パネル"""
+        """管理機能パネル - サーバー管理者専用の高度な機能"""
         if not interaction.user.guild_permissions.manage_messages:
-            await interaction.response.send_message("❌ 管理者権限が必要です。", ephemeral=True)
+            embed = discord.Embed(
+                title="❌ アクセス制限",
+                description="この機能は**サーバー管理者**のみ利用可能です。",
+                color=0xff6b6b
+            )
+            embed.add_field(
+                name="必要な権限",
+                value="・メッセージの管理権限\n・またはサーバー管理者権限",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
         view = AdminToolsPanel()
         embed = discord.Embed(
-            title="⚙️ 管理機能パネル",
-            description="管理者専用機能",
-            color=0x666666
+            title="⚙️ 管理者機能パネル",
+            description="**サーバー管理者専用の高度な機能**",
+            color=0x99aab5
         )
+        
+        embed.add_field(
+            name="🧹 メモリクリーンアップ",
+            value="・Bot内部データの最適化\n・不要なキャッシュ削除\n・パフォーマンス改善",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📊 使用量確認",
+            value="・AI機能の利用状況\n・ユーザー別統計\n・制限値との比較",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔧 その他機能",
+            value="・システム監視\n・エラー状況確認\n・設定変更（今後追加予定）",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="⚠️ 注意事項",
+            value="• これらの機能は**管理者専用**です\n• 実行前に影響範囲を確認してください\n• 不明な点があれば開発者に問い合わせを",
+            inline=False
+        )
+        
+        embed.set_footer(text="🛡️ サーバーの健康状態を維持するための機能です")
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 class GameRecruitPanel(discord.ui.View):
@@ -4904,11 +5209,11 @@ class CustomGameModal(discord.ui.Modal, title='🎯 カスタムゲーム募集�
     )
     
     start_time = discord.ui.TextInput(
-        label='開始時間',
-        placeholder='例: 20:00, 今から, 30分後',
+        label='開始日時',
+        placeholder='例: 12/25 20:00, 明日 21:00, 今から, 2時間後',
         default='今から',
         min_length=1,
-        max_length=20
+        max_length=30
     )
     
     description = discord.ui.TextInput(
@@ -5025,11 +5330,11 @@ class RankedMatchModal(discord.ui.Modal, title='🏆 ランクマッチ募集作
     )
     
     start_time = discord.ui.TextInput(
-        label='開始時間',
-        placeholder='例: 20:00, 今から, 30分後',
+        label='開始日時',
+        placeholder='例: 12/25 20:00, 明日 21:00, 今から, 2時間後',
         default='今から',
         min_length=1,
-        max_length=20
+        max_length=30
     )
     
     description = discord.ui.TextInput(
@@ -5145,6 +5450,14 @@ class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
         max_length=2
     )
     
+    start_time = discord.ui.TextInput(
+        label='開始日時（任意）',
+        placeholder='例: 12/25 20:00, 明日 21:00, 今から, 2時間後',
+        required=False,
+        min_length=1,
+        max_length=30
+    )
+    
     description = discord.ui.TextInput(
         label='説明（任意）',
         placeholder='例: 優勝者には特典あり',
@@ -5185,6 +5498,11 @@ class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
             max_participants_value = self.max_participants.value.strip()
             if max_participants_value:
                 args.append(f"{max_participants_value}人")
+            
+            # 開始時間の処理
+            start_time_value = self.start_time.value.strip()
+            if start_time_value:
+                args.append(start_time_value)
             
             # 説明の処理
             description_value = self.description.value.strip()
@@ -5229,72 +5547,72 @@ class TournamentModal(discord.ui.Modal, title='🏅 トーナメント作成'):
 @bot.command(name='panel', help='メイン機能コントロールパネルを表示します')
 @prevent_duplicate_execution
 async def show_control_panel(ctx):
-    """メインコントロールパネル表示 - 全コマンドとの完全統一"""
+    """メインコントロールパネル表示 - 直感的なボタンUIで全機能にアクセス"""
     embed = discord.Embed(
-        title="🎮 メイン機能コントロールパネル",
-        description="全ての機能をボタンで簡単操作！コマンドと完全同等の機能を提供",
-        color=0x00aaff
+        title="🎮 リオンBot メイン機能パネル",
+        description="**ワンクリックで全機能を操作！初心者も上級者も使いやすい統合UI**",
+        color=0x5865f2
     )
     
+    # 上部の説明
     embed.add_field(
-        name="🎯 ゲーム募集",
-        value="**カスタムゲーム:** `!custom create` と同等\n"
-              "**ランクマッチ:** `!ranked create` と同等\n"
-              "**トーナメント:** `!tournament create` と同等",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="🎲 ゲーム機能",
-        value="**チーム分け:** `!team` と同等\n"
-              "**マップ選択:** `!map` と同等\n"
-              "**統計確認:** `!valorant` と同等\n"
-              "**サイコロ:** `!dice` と同等",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="🏆 ランク管理",
-        value="**ランク設定:** `!rank set` と同等\n"
-              "**ランク確認:** `!rank show` と同等\n"
-              "**ランク一覧:** `!ranklist` と同等",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="🤖 AI機能",
-        value="**AI会話:** `!ai` と同等\n"
-              "**翻訳:** `!translate` と同等\n"
-              "**要約:** `!summarize` と同等",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="📊 情報・統計",
-        value="**サーバー情報:** `!info` と同等\n"
-              "**ユーザー情報:** `!userinfo` と同等\n"
-              "**Bot状態:** `!botstatus` と同等",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="⚙️ 管理機能",
-        value="**クリーンアップ:** `!cleanup` と同等\n"
-              "**使用量確認:** `!usage` と同等\n"
-              "（管理者権限必要）",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="🔄 完全統一された機能",
-        value="• ボタン操作とコマンド操作で**全く同じ結果**\n"
-              "• チャンネル選択機能付き\n"
-              "• 従来のコマンドも引き続き利用可能\n"
-              "• 同じバリデーション、同じリマインダー機能",
+        name="🚀 操作方法",
+        value="**⬇️ 下のボタンをクリック** → 入力フォーム表示 → **完了！**\nコマンドと**完全に同じ機能**を提供します",
         inline=False
     )
     
-    embed.set_footer(text="ボタンクリック = コマンド入力と同等の機能を提供")
+    # 機能グループ1
+    embed.add_field(
+        name="🎮 ゲーム募集作成",
+        value="🎯 **カスタムゲーム募集**\n🏆 **ランクマッチ募集**\n🏅 **トーナメント開催**",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🎲 ゲーム便利機能",
+        value="🎯 **チーム分け**\n🗺️ **マップ選択**\n📊 **統計確認**\n🎲 **サイコロ**",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🏆 VALORANTランク",
+        value="📝 **ランク設定**\n👀 **ランク確認**\n📋 **ランク一覧**",
+        inline=True
+    )
+    
+    # 機能グループ2
+    embed.add_field(
+        name="🤖 AI・翻訳機能",
+        value="💬 **AI会話**\n🌍 **翻訳**\n📝 **要約**",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="📊 情報・統計表示",
+        value="🏠 **サーバー情報**\n👤 **ユーザー情報**\n🤖 **Bot状態**",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="⚙️ 管理者機能",
+        value="🧹 **メモリクリーンアップ**\n📊 **使用量確認**\n*(管理者権限必要)*",
+        inline=True
+    )
+    
+    # 特徴・利点
+    embed.add_field(
+        name="✨ パネルの特徴",
+        value=(
+            "🔄 **コマンド完全互換** - 既存コマンドと全く同じ動作\n"
+            "📝 **入力フォーム** - 項目ごとに分かりやすく入力\n"
+            "🎯 **チャンネル選択** - 他のチャンネルにも募集作成可能\n"
+            "⚡ **高速操作** - ボタン1つで複雑な操作も簡単に\n"
+            "👥 **初心者フレンドリー** - コマンドを覚えなくてもOK"
+        ),
+        inline=False
+    )
+    
+    embed.set_footer(text="💡 コマンドが分からない場合は「!help」でヘルプを表示 | 🎮 VALORANTライフをもっと楽しく！")
     
     view = MainControlPanel()
     await ctx.send(embed=embed, view=view)
@@ -5705,6 +6023,7 @@ async def create_scrim(ctx, args):
     # 引数解析
     max_players = 10  # デフォルト
     scheduled_time = "未設定"
+    parsed_datetime = None
     game_mode = "カスタム"
     description = ""
     
@@ -5726,11 +6045,18 @@ async def create_scrim(ctx, args):
                     max_players = int(arg.replace('人', ''))
                 except:
                     pass
-        elif ':' in arg or '時' in arg:
-            # 時間指定
-            scheduled_time = arg
-        elif arg in ['今から', 'now', 'すぐ']:
-            scheduled_time = "今すぐ"
+        elif any(char in arg for char in [':', '時', '/', '-']) or arg in ['今から', 'now', 'すぐ', '明日', '今日']:
+            # 時間・日付指定
+            if arg in ['今から', 'now', 'すぐ']:
+                scheduled_time = "今すぐ"
+                parsed_datetime = datetime.now()
+            else:
+                parsed_dt = parse_datetime_input(arg)
+                if parsed_dt:
+                    scheduled_time = format_datetime_display(parsed_dt)
+                    parsed_datetime = parsed_dt
+                else:
+                    scheduled_time = arg
         else:
             # 説明文
             if description:
@@ -6544,6 +6870,7 @@ async def create_ranked_recruit(ctx, args):
     # 引数解析
     rank_requirement = "any"  # デフォルト
     scheduled_time = "未設定"
+    parsed_datetime = None
     max_players = 5  # デフォルト5人（ランクマッチは5人）
     description = ""
     min_rank = None
@@ -6566,11 +6893,18 @@ async def create_ranked_recruit(ctx, args):
             else:
                 rank_requirement = arg
                 min_rank = parse_rank_requirement(arg)
-        elif ':' in arg or '時' in arg:
-            # 時間指定
-            scheduled_time = arg
-        elif arg in ['今から', 'now', 'すぐ']:
-            scheduled_time = "今すぐ"
+        elif any(char in arg for char in [':', '時', '/', '-']) or arg in ['今から', 'now', 'すぐ', '明日', '今日']:
+            # 時間・日付指定
+            if arg in ['今から', 'now', 'すぐ']:
+                scheduled_time = "今すぐ"
+                parsed_datetime = datetime.now()
+            else:
+                parsed_dt = parse_datetime_input(arg)
+                if parsed_dt:
+                    scheduled_time = format_datetime_display(parsed_dt)
+                    parsed_datetime = parsed_dt
+                else:
+                    scheduled_time = arg
         elif arg.lower() == 'any':
             rank_requirement = "ランク問わず"
         elif arg.isdigit():
@@ -7824,17 +8158,41 @@ async def create_tournament(ctx, args):
     tournament_type = "シングル戦"
     max_participants = 16
     description = ""
+    scheduled_time = "未設定"
+    parsed_datetime = None
     
-    if args:
-        format_input = " ".join(args)
-        if "ダブル" in format_input or "double" in format_input.lower():
+    for arg in args:
+        if "ダブル" in arg or "double" in arg.lower():
             tournament_type = "ダブル戦"
-        elif "チーム" in format_input or "team" in format_input.lower():
+        elif "チーム" in arg or "team" in arg.lower():
             tournament_type = "チーム戦"
-        elif "シングル" in format_input or "single" in format_input.lower():
+        elif "シングル" in arg or "single" in arg.lower():
             tournament_type = "シングル戦"
+        elif arg.isdigit() or ('人' in arg and arg.replace('人', '').isdigit()):
+            # 最大参加者数の指定
+            try:
+                max_participants = int(arg.replace('人', ''))
+                max_participants = min(max_participants, 64)  # 最大64人
+            except:
+                pass
+        elif any(char in arg for char in [':', '時', '/', '-']) or arg in ['今から', 'now', 'すぐ', '明日', '今日']:
+            # 時間・日付指定
+            if arg in ['今から', 'now', 'すぐ']:
+                scheduled_time = "今すぐ"
+                parsed_datetime = datetime.now()
+            else:
+                parsed_dt = parse_datetime_input(arg)
+                if parsed_dt:
+                    scheduled_time = format_datetime_display(parsed_dt)
+                    parsed_datetime = parsed_dt
+                else:
+                    scheduled_time = arg
         else:
-            description = format_input
+            # 説明文
+            if description:
+                description += f" {arg}"
+            else:
+                description = arg
     
     # トーナメントデータ作成
     tournament_data = {
@@ -7844,6 +8202,8 @@ async def create_tournament(ctx, args):
         'created_at': datetime.now(),
         'tournament_type': tournament_type,
         'max_participants': max_participants,
+        'scheduled_time': scheduled_time,
+        'parsed_datetime': parsed_datetime,
         'description': description,
         'participants': [],
         'status': 'registration',  # registration, ongoing, ended
