@@ -3255,8 +3255,6 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                         value=f"[画像リンク]({current_info['image_url']})",
                         inline=False
                     )
-                    # サムネイルとしても設定
-                    embed.set_thumbnail(url=current_info['image_url'])
             else:
                 embed.add_field(
                     name="📊 現在ランク",
@@ -3280,8 +3278,6 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                         value=f"[画像リンク]({peak_info['image_url']})",
                         inline=False
                     )
-                    # メイン画像としても設定
-                    embed.set_image(url=peak_info['image_url'])
             else:
                 embed.add_field(
                     name="🏆 最高ランク",
@@ -3297,8 +3293,19 @@ async def rank_system(ctx, action=None, rank_type=None, *rank_input):
                     inline=False
                 )
             
-            # ユーザーアバターはサムネイルに
-            embed.set_thumbnail(url=target_user.display_avatar.url)
+            # 画像設定の最適化
+            # サムネイル：現在ランクを優先、なければ最高ランク、どちらもなければユーザーアバター
+            if current_rank and 'image_url' in VALORANT_RANKS[current_rank]:
+                embed.set_thumbnail(url=VALORANT_RANKS[current_rank]['image_url'])
+            elif peak_rank and 'image_url' in VALORANT_RANKS[peak_rank]:
+                embed.set_thumbnail(url=VALORANT_RANKS[peak_rank]['image_url'])
+            else:
+                embed.set_thumbnail(url=target_user.display_avatar.url)
+            
+            # メイン画像：最高ランクがあって現在ランクと異なる場合に設定
+            if peak_rank and 'image_url' in VALORANT_RANKS[peak_rank]:
+                if not current_rank or peak_rank != current_rank:
+                    embed.set_image(url=VALORANT_RANKS[peak_rank]['image_url'])
             await ctx.send(embed=embed)
             
         elif action.lower() == "list" or action.lower() == "ranking":
