@@ -4080,7 +4080,7 @@ tournament_matches = {}  # {tournament_id: [match_data]}
 class TournamentView(discord.ui.View):
     """トーナメント用UIボタン"""
     
-    def __init__(self, timeout=3600):  # 1時間でタイムアウト
+    def __init__(self, timeout=None):  # タイムアウト無効
         super().__init__(timeout=timeout)
     
     async def on_timeout(self):
@@ -6101,7 +6101,7 @@ async def show_control_panel(ctx):
 class CustomGameView(discord.ui.View):
     """カスタムゲーム募集のボタンUI"""
     
-    def __init__(self, timeout=3600):  # 1時間でタイムアウト
+    def __init__(self, timeout=None):  # タイムアウト無効
         super().__init__(timeout=timeout)
         
     async def on_timeout(self):
@@ -6844,7 +6844,7 @@ async def end_scrim(ctx):
 class RankedRecruitView(discord.ui.View):
     """ランクマッチ募集のボタンUI"""
     
-    def __init__(self, timeout=3600):  # 1時間でタイムアウト
+    def __init__(self, timeout=None):  # タイムアウト無効
         super().__init__(timeout=timeout)
         
     async def on_timeout(self):
